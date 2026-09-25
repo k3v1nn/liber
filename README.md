@@ -42,3 +42,11 @@ O motor de análise está em `conversor/pdf_analysis.py`, a exportação em `con
 O próximo passo de qualidade é testar com PDFs reais: livro digital, PDF escaneado, duas colunas e livro ilustrado. A detecção automática só pode ser calibrada com exemplos representativos.
 
 Os modelos `por.traineddata` e `eng.traineddata` vêm do [tessdata_fast](https://github.com/tesseract-ocr/tessdata_fast), sob Apache-2.0. A licença está em `resources/tessdata/LICENSE`.
+
+## Licença
+
+O código deste aplicativo é distribuído sob a [GNU Affero General Public License, versão 3](LICENSE) (`AGPL-3.0-only`). Ela permite usar, estudar, modificar e redistribuir o aplicativo, inclusive comercialmente, desde que seus termos sejam cumpridos. Versões modificadas distribuídas e determinadas formas de disponibilização pela rede exigem acesso ao código-fonte correspondente.
+
+Os modelos de OCR mantêm a licença Apache-2.0 indicada acima. As demais bibliotecas instaladas por `requirements.txt` mantêm suas próprias licenças.
+
+Os EPUBs criados pelo aplicativo não recebem automaticamente a licença do código. Os direitos sobre textos, imagens e outros materiais de origem continuam sujeitos às licenças e autorizações desses materiais.
