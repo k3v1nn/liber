@@ -14,6 +14,7 @@ from conversor.epub_export import export_manga, export_pdf
 from conversor.models import MangaProject
 from conversor.pdf_analysis import analyze_pdf
 from conversor.web_images import import_images_from_url
+from conversor.i18n import translate_engine_message
 
 
 class ConversionTests(unittest.TestCase):
@@ -35,6 +36,9 @@ class ConversionTests(unittest.TestCase):
             project = analyze_pdf(source)
             self.assertEqual(project.title, "Livro teste")
             self.assertTrue(any(block.role == "Capítulo" for block in project.blocks))
+            cover = root / "cover.png"
+            Image.new("RGB", (120, 180), "blue").save(cover)
+            project.custom_cover = cover
             target = root / "book.epub"
             export_pdf(project, target)
             with zipfile.ZipFile(target) as archive:
@@ -43,6 +47,8 @@ class ConversionTests(unittest.TestCase):
                 self.assertTrue(any(name.endswith("nav.xhtml") for name in names))
                 text = b" ".join(archive.read(name) for name in names if name.endswith(".xhtml"))
                 self.assertIn("Primeiro parágrafo", text.decode("utf-8"))
+                with Image.open(io.BytesIO(archive.read("EPUB/cover.png"))) as image:
+                    self.assertEqual(image.getpixel((0, 0)), (0, 0, 255))
 
     def test_manga_fixed_layout_and_reading_direction(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -120,6 +126,25 @@ class ConversionTests(unittest.TestCase):
                 pages = import_images_from_url("https://example.org/chapter", tmp)
             self.assertEqual(len(pages), 2)
             self.assertTrue(all(page.is_file() for page in pages))
+
+    def test_custom_cover_is_exported_without_adding_a_page(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cover = root / "cover.png"
+            Image.new("RGB", (120, 180), "blue").save(cover)
+            page = root / "page.png"
+            Image.new("RGB", (120, 180), "red").save(page)
+            project = MangaProject(title="Cover test", pages=[page], custom_cover=cover)
+            target = root / "comic.epub"
+            export_manga(project, target)
+            with zipfile.ZipFile(target) as archive:
+                names = archive.namelist()
+                self.assertEqual(len([name for name in names if name.endswith(".xhtml") and "/pages/" in name]), 1)
+                with Image.open(io.BytesIO(archive.read("EPUB/cover.png"))) as image:
+                    self.assertEqual(image.getpixel((0, 0)), (0, 0, 255))
+
+    def test_engine_messages_have_english_translation(self):
+        self.assertEqual(translate_engine_message("O PDF está protegido por senha.", "en"), "The PDF is password protected.")
 
 
 if __name__ == "__main__":

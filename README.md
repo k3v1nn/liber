@@ -19,6 +19,7 @@ No Windows, use `.venv\Scripts\python.exe` no lugar de `.venv/bin/python`.
 1. Importe o PDF.
 2. Revise os blocos identificados. Você pode mudar o tipo de um bloco, corrigir o texto, alterar a classificação da página e reordenar blocos dentro da mesma página.
 3. Escolha a página usada como capa e confira a prévia.
+   Você também pode escolher uma imagem de capa própria sem alterar as páginas do livro.
 4. Exporte o EPUB de texto fluido. O leitor de EPUB controla o tamanho da fonte.
 
 A análise detecta páginas com pouco texto, títulos por tamanho e padrões, possíveis capas e páginas iniciais, imagens e cabeçalhos/rodapés repetidos. Páginas escaneadas passam por OCR em português e inglês quando a biblioteca Tesseract está disponível no sistema. Os modelos de idioma estão incluídos em `resources/tessdata`. É uma primeira heurística, sujeita a correção na interface. Tabelas complexas, notas com referências cruzadas e formatação tipográfica detalhada ainda precisam de tratamento próprio.
@@ -27,9 +28,27 @@ A análise detecta páginas com pouco texto, títulos por tamanho e padrões, po
 
 1. Adicione imagens ou uma pasta. Também é possível importar imagens visíveis de uma URL pública; confira se você tem autorização para baixar e reutilizar o conteúdo.
 2. Revise a ordem, marque a capa e os inícios de capítulo.
+   Uma imagem de capa própria pode ser adicionada separadamente das páginas.
 3. Escolha a direção de leitura e exporte um EPUB de layout fixo.
 
 Sites que montam as imagens com JavaScript, exigem login ou oferecem apenas miniaturas podem precisar de arquivos baixados manualmente. O importador não contorna essas restrições.
+
+## Interface
+
+O seletor no canto superior direito alterna entre português e inglês. O painel azul no topo mostra o andamento e o resultado das tarefas. A capa tem um painel com prévia em cada modo.
+
+## Executáveis
+
+O código inclui um [workflow de build](.github/workflows/build.yml) para Linux x64, Windows x64 e macOS Intel/Apple Silicon. No GitHub, abra **Actions → Build desktop apps → Run workflow**; ao terminar, baixe o ZIP correspondente em **Artifacts**. O repositório privado só permite o download a pessoas com acesso; para outros testadores, envie o ZIP diretamente.
+
+Para gerar no computador atual, instale as dependências e o PyInstaller no ambiente virtual e execute:
+
+```bash
+.venv/bin/python -m pip install 'pyinstaller>=6.15,<7'
+.venv/bin/python build.py
+```
+
+No Windows, use `.venv\Scripts\python.exe`. O pacote fica em `release/` e contém o aplicativo, a licença e `codigo-fonte.zip`. Descompacte o ZIP antes de executar. O build precisa rodar em cada sistema operacional; o PyInstaller não gera executáveis de outros sistemas a partir do Linux. Os pacotes ainda não são assinados digitalmente. O executável Linux criado em distribuições recentes pode depender de uma versão de glibc igualmente recente.
 
 ## Desenvolvimento
 

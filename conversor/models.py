@@ -37,6 +37,7 @@ class PdfProject:
     scanned_pages: list[int] = field(default_factory=list)
     ocr_pages: list[int] = field(default_factory=list)
     cover_page: int = 0
+    custom_cover: Path | None = None
     warnings: list[str] = field(default_factory=list)
 
 
@@ -48,4 +49,5 @@ class MangaProject:
     pages: list[Path] = field(default_factory=list)
     right_to_left: bool = True
     cover_index: int = 0
+    custom_cover: Path | None = None
     chapter_titles: dict[str, str] = field(default_factory=dict)

@@ -110,7 +110,7 @@ def export_pdf(project: PdfProject, destination: str | Path) -> None:
     if not any(b.role != "Ignorar" and (b.text or b.image) for b in project.blocks):
         raise ValueError("Não há conteúdo extraído para exportar. Um PDF escaneado precisa de OCR.")
     book = _base_book(project.title, project.author, project.language)
-    cover = render_page(project.source, project.cover_page, width=1100)
+    cover = _image_png(project.custom_cover.read_bytes()) if project.custom_cover else render_page(project.source, project.cover_page, width=1100)
     book.set_cover("cover.png", cover, create_page=False)
     css = epub.EpubItem(uid="style", file_name="styles/book.css", media_type="text/css", content=STYLES)
     book.add_item(css)
@@ -163,7 +163,7 @@ def export_manga(project: MangaProject, destination: str | Path) -> None:
         raise ValueError("A capa selecionada não existe.")
     book = _base_book(project.title, project.author, project.language)
     book.set_direction("rtl" if project.right_to_left else "ltr")
-    cover_data, cover_ext, _ = _manga_image(project.pages[project.cover_index])
+    cover_data, cover_ext, _ = _manga_image(project.custom_cover or project.pages[project.cover_index])
     book.set_cover(f"cover.{cover_ext}", cover_data, create_page=False)
     pages: list[epub.EpubHtml] = []
     for index, source in enumerate(project.pages, 1):

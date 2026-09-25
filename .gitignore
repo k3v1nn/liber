@@ -5,6 +5,11 @@ __pycache__/
 *.epub
 *.pdf
 *.png
+!assets/icon.png
 *.jpg
 *.jpeg
 *.webp
+build/
+dist/
+release/
+*.spec
