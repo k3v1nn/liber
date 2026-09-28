@@ -26,12 +26,14 @@ A análise detecta páginas com pouco texto, títulos por tamanho e padrões, po
 
 ## Mangá / HQ
 
-1. Adicione imagens ou uma pasta. Também é possível importar imagens visíveis de uma URL pública; confira se você tem autorização para baixar e reutilizar o conteúdo.
+1. Adicione imagens, uma pasta ou um PDF de HQ. Cada página do PDF entra na lista como imagem, na ordem original. Também é possível importar imagens visíveis de uma URL pública; confira se você tem autorização para baixar e reutilizar o conteúdo.
 2. Revise a ordem, marque a capa e os inícios de capítulo.
    Uma imagem de capa própria pode ser adicionada separadamente das páginas.
 3. Escolha a direção de leitura e exporte um EPUB de layout fixo.
 
 Sites que montam as imagens com JavaScript, exigem login ou oferecem apenas miniaturas podem precisar de arquivos baixados manualmente. O importador não contorna essas restrições.
+
+O PDF importado nesta aba é convertido em páginas ilustradas para EPUB de layout fixo. Para livros cujo texto deve se adaptar à tela, use a aba **Livro em PDF**.
 
 ## Interface
 
@@ -39,7 +41,7 @@ O seletor no canto superior direito alterna entre português e inglês. O painel
 
 ## Executáveis
 
-O código inclui um [workflow de build](.github/workflows/build.yml) para Linux x64, Windows x64 e macOS Intel/Apple Silicon. No GitHub, abra **Actions → Build desktop apps → Run workflow**; ao terminar, baixe o ZIP correspondente em **Artifacts**. O repositório privado só permite o download a pessoas com acesso; para outros testadores, envie o ZIP diretamente.
+Baixe o ZIP do seu sistema na seção **Releases** do repositório. O código inclui um [workflow de build](.github/workflows/build.yml) para Linux x64, Windows x64 e macOS Intel/Apple Silicon. O repositório privado só permite o download a pessoas com acesso; para outros testadores, envie o ZIP diretamente.
 
 Para gerar no computador atual, instale as dependências e o PyInstaller no ambiente virtual e execute:
 

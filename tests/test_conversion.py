@@ -15,6 +15,7 @@ from conversor.models import MangaProject
 from conversor.pdf_analysis import analyze_pdf
 from conversor.web_images import import_images_from_url
 from conversor.i18n import translate_engine_message
+from conversor.comic_pdf import import_comic_pdf
 
 
 class ConversionTests(unittest.TestCase):
@@ -142,6 +143,27 @@ class ConversionTests(unittest.TestCase):
                 self.assertEqual(len([name for name in names if name.endswith(".xhtml") and "/pages/" in name]), 1)
                 with Image.open(io.BytesIO(archive.read("EPUB/cover.png"))) as image:
                     self.assertEqual(image.getpixel((0, 0)), (0, 0, 255))
+
+    def test_comic_pdf_pages_keep_their_order_in_epub(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "comic.pdf"
+            document = pymupdf.open()
+            for color in ((1, 0, 0), (0, 0, 1)):
+                page = document.new_page(width=120, height=180)
+                page.draw_rect(page.rect, fill=color, color=None)
+            document.save(source)
+            document.close()
+            pages = import_comic_pdf(source, root / "pages", longest_edge=360)
+            self.assertEqual([page.name for page in pages], ["page-00001.png", "page-00002.png"])
+            with Image.open(pages[0]) as first, Image.open(pages[1]) as second:
+                self.assertEqual(first.getpixel((100, 100)), (255, 0, 0))
+                self.assertEqual(second.getpixel((100, 100)), (0, 0, 255))
+            target = root / "comic.epub"
+            export_manga(MangaProject(title="Comic", pages=pages), target)
+            with zipfile.ZipFile(target) as archive:
+                self.assertIn("EPUB/pages/page-0001.xhtml", archive.namelist())
+                self.assertIn("EPUB/pages/page-0002.xhtml", archive.namelist())
 
     def test_engine_messages_have_english_translation(self):
         self.assertEqual(translate_engine_message("O PDF está protegido por senha.", "en"), "The PDF is password protected.")
