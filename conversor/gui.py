@@ -10,49 +10,22 @@ from pathlib import Path
 from PySide6.QtCore import QSettings, QSize, QThread, Qt, Signal
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import (
-    QApplication, QCheckBox, QComboBox, QFileDialog, QGridLayout, QGroupBox,
-    QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget, QMainWindow,
-    QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QSplitter,
-    QTabWidget, QTableWidget, QTableWidgetItem, QTextBrowser, QVBoxLayout, QSizePolicy,
-    QWidget, QProgressBar, QStyle,
+    QApplication, QFileDialog, QHBoxLayout, QInputDialog, QLabel,
+    QMainWindow, QMessageBox, QTabWidget, QTableWidgetItem, QVBoxLayout,
+    QSizePolicy, QWidget, QProgressBar,
 )
 
 from .epub_export import export_manga, export_pdf
 from .comic_pdf import import_comic_pdf
-from .models import BLOCK_ROLES, PAGE_ROLES, MangaProject, PdfProject
+from .models import MangaProject, PdfProject
 from .pdf_analysis import analyze_pdf, render_page
 from .web_images import import_images_from_url
 from .i18n import EN, translate_engine_message
+from .appearance import THEME, line_icon, CleanComboBox as QComboBox
+from .ui_layout import WorkspaceLayout
 
 
 IMAGE_FILTER = "Imagens (*.png *.jpg *.jpeg *.webp *.bmp *.tif *.tiff)"
-
-THEME = """
-QMainWindow, QWidget#shell { background: #f7f9fc; }
-QWidget { color: #223047; font-family: 'Noto Sans', 'Segoe UI', sans-serif; font-size: 13px; }
-QGroupBox { background: #ffffff; border: 1px solid #dde4ed; border-radius: 10px; margin-top: 14px; padding: 13px 14px 10px; font-weight: 600; }
-QGroupBox::title { subcontrol-origin: margin; left: 15px; padding: 0 5px; background: #f7f9fc; color: #43536a; }
-QPushButton { background: #ffffff; border: 1px solid #d7e0ea; border-radius: 8px; padding: 7px 13px; min-height: 22px; font-weight: 600; }
-QPushButton:hover { background: #eef4fc; border-color: #9fb8de; }
-QPushButton:pressed { background: #dce9fa; }
-QPushButton:disabled { color: #9aa8ba; background: #f5f7fa; border-color: #e5eaf0; }
-QPushButton[primary="true"] { background: #315ea8; border-color: #315ea8; color: #ffffff; }
-QPushButton[primary="true"]:hover { background: #264f93; }
-QLineEdit, QComboBox, QPlainTextEdit, QTextBrowser, QListWidget, QTableWidget { background: #ffffff; border: 1px solid #dce3ec; border-radius: 8px; padding: 5px; selection-background-color: #d9e8fb; selection-color: #172e50; }
-QLineEdit, QComboBox { min-height: 26px; }
-QComboBox { padding-left: 9px; padding-right: 22px; }
-QTabWidget::pane { border: 0; }
-QTabBar::tab { background: transparent; padding: 10px 20px; color: #617188; border-bottom: 2px solid transparent; font-weight: 600; }
-QTabBar::tab:selected { color: #315ea8; border-bottom-color: #315ea8; }
-QTabBar::tab:hover { color: #244d90; }
-QScrollArea { border: 1px solid #dce3ec; border-radius: 9px; background: #f1f4f8; }
-QHeaderView::section { background: #edf1f6; border: 0; border-bottom: 1px solid #dce2e9; padding: 8px; font-weight: 600; }
-QLabel#activity { background: #e9f1fc; color: #214b86; border-radius: 8px; padding: 9px 12px; font-weight: 600; }
-QLabel#sectionLabel { color: #52657f; font-weight: 600; }
-QProgressBar { border: 0; border-radius: 3px; background: #dfe6ef; max-height: 6px; }
-QProgressBar::chunk { background: #4175c3; border-radius: 3px; }
-"""
-
 
 def _natural_key(path: Path) -> list[int | str]:
     return [int(part) if part.isdigit() else part.casefold() for part in re.split(r"(\d+)", str(path))]
@@ -100,7 +73,7 @@ class FitImage(QLabel):
             self.setPixmap(self.original.scaled(size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
 
 
-class MainWindow(QMainWindow):
+class MainWindow(WorkspaceLayout, QMainWindow):
     def __init__(self):
         super().__init__()
         saved_language = QSettings("ConversorEPUB", "ConversorEPUB").value("ui_language", "pt")
@@ -129,11 +102,19 @@ class MainWindow(QMainWindow):
         outer.setSpacing(12)
         top = QHBoxLayout()
         title = QLabel(self._t("Conversor EPUB"))
-        title.setStyleSheet("font-size: 23px; font-weight: 700; color: #172c4b;")
-        top.addWidget(title)
+        title.setObjectName("brand")
+        symbol = QLabel()
+        symbol.setPixmap(line_icon("book", "#335fd1", 32).pixmap(32, 32))
+        top.addWidget(symbol)
+        brand = QVBoxLayout()
+        brand.setSpacing(2)
+        brand.addWidget(title)
+        brand.addWidget(self._label("Sua biblioteca, do seu jeito.", "subtitle"))
+        top.addLayout(brand)
         top.addStretch()
         top.addWidget(QLabel(self._t("Idioma da interface")))
         self.ui_combo = QComboBox()
+        self.ui_combo.setFixedSize(120, 36)
         self.ui_combo.addItem("Português", "pt")
         self.ui_combo.addItem("English", "en")
         self.ui_combo.setCurrentIndex(0 if self.ui_language == "pt" else 1)
@@ -181,213 +162,12 @@ class MainWindow(QMainWindow):
         self.tabs.setCurrentIndex(tab)
         self._message(self._t("Pronto para começar"))
 
-    def _button(self, label: str, callback, primary: bool = False, icon=None) -> QPushButton:
-        button = QPushButton(self._t(label))
-        if icon is not None:
-            button.setIcon(self.style().standardIcon(icon))
-        if primary:
-            button.setProperty("primary", True)
-        button.clicked.connect(callback)
-        return button
-
-    def _pdf_tab(self) -> QWidget:
-        root = QWidget()
-        layout = QVBoxLayout(root)
-        actions = QHBoxLayout()
-        actions.addWidget(self._button("Importar PDF", self._open_pdf, icon=QStyle.StandardPixmap.SP_DialogOpenButton))
-        actions.addWidget(self._button("Exportar EPUB", self._export_pdf, primary=True, icon=QStyle.StandardPixmap.SP_DialogSaveButton))
-        actions.addStretch()
-        layout.addLayout(actions)
-
-        metadata = QGroupBox(self._t("Dados do livro"))
-        metadata.setFixedHeight(180)
-        form = QGridLayout(metadata)
-        self.pdf_title = QLineEdit()
-        self.pdf_author = QLineEdit()
-        self.pdf_language = QLineEdit("pt-BR")
-        for column, (label, field) in enumerate((("Título", self.pdf_title), ("Autor", self.pdf_author))):
-            form.addWidget(QLabel(self._t(label)), 0, column)
-            form.addWidget(field, 1, column)
-        form.addWidget(QLabel(self._t("Idioma")), 2, 0)
-        form.addWidget(self.pdf_language, 3, 0)
-        form.setColumnStretch(0, 3)
-        form.setColumnStretch(1, 2)
-        details = QHBoxLayout()
-        details.setSpacing(16)
-        details.addWidget(metadata, 2)
-
-        cover = QGroupBox(self._t("Capa"))
-        cover.setFixedHeight(180)
-        cover_row = QHBoxLayout(cover)
-        self.pdf_cover_image = QLabel()
-        self.pdf_cover_image.setFixedSize(78, 108)
-        self.pdf_cover_image.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.pdf_cover_image.setStyleSheet("background:#edf1f6; border-radius:6px;")
-        cover_row.addWidget(self.pdf_cover_image)
-        cover_controls = QVBoxLayout()
-        self.pdf_cover_info = QLabel(self._t("Escolha uma página ou adicione uma imagem."))
-        cover_controls.addWidget(self.pdf_cover_info)
-        self.pdf_cover_combo = QComboBox()
-        self.pdf_cover_combo.addItem(self._t("Importe um PDF para escolher a capa"))
-        self.pdf_cover_combo.setEnabled(False)
-        self.pdf_cover_combo.currentIndexChanged.connect(self._pdf_cover_changed)
-        cover_controls.addWidget(self.pdf_cover_combo)
-        cover_buttons = QHBoxLayout()
-        cover_buttons.addWidget(self._button("Escolher imagem", self._add_pdf_cover, icon=QStyle.StandardPixmap.SP_DialogOpenButton))
-        self.pdf_clear_cover = self._button("Limpar capa", self._remove_pdf_cover)
-        self.pdf_clear_cover.setEnabled(False)
-        cover_buttons.addWidget(self.pdf_clear_cover)
-        cover_controls.addLayout(cover_buttons)
-        cover_row.addLayout(cover_controls)
-        details.addWidget(cover, 3)
-        layout.addLayout(details)
-
-        self.pdf_warning = QLabel(self._t("A análise sugere a estrutura; revise os títulos e a ordem dos blocos."))
-        self.pdf_warning.setWordWrap(True)
-        self.pdf_warning.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
-        layout.addWidget(self.pdf_warning)
-
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        left = QWidget()
-        left_layout = QVBoxLayout(left)
-        left_layout.addWidget(QLabel(self._t("Blocos encontrados (selecione para corrigir)")))
-        self.block_table = QTableWidget(0, 3)
-        self.block_table.setHorizontalHeaderLabels([self._t("Página"), self._t("Tipo"), self._t("Conteúdo")])
-        self.block_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.block_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.block_table.verticalHeader().setVisible(False)
-        self.block_table.setColumnWidth(0, 75)
-        self.block_table.setColumnWidth(1, 105)
-        self.block_table.horizontalHeader().setStretchLastSection(True)
-        self.block_table.currentCellChanged.connect(self._select_pdf_block)
-        left_layout.addWidget(self.block_table)
-        block_actions = QHBoxLayout()
-        block_actions.addWidget(self._button("↑ Bloco", lambda: self._move_block(-1)))
-        block_actions.addWidget(self._button("↓ Bloco", lambda: self._move_block(1)))
-        left_layout.addLayout(block_actions)
-        splitter.addWidget(left)
-
-        right = QWidget()
-        right_layout = QVBoxLayout(right)
-        edit_row = QHBoxLayout()
-        self.page_role = QComboBox()
-        for role in PAGE_ROLES:
-            self.page_role.addItem(self._t(role), role)
-        self.page_role.currentTextChanged.connect(self._page_role_changed)
-        self.block_role = QComboBox()
-        for role in BLOCK_ROLES:
-            self.block_role.addItem(self._t(role), role)
-        edit_row.addWidget(QLabel(self._t("Página:")))
-        edit_row.addWidget(self.page_role, 1)
-        edit_row.addWidget(QLabel(self._t("Bloco:")))
-        edit_row.addWidget(self.block_role, 1)
-        right_layout.addLayout(edit_row)
-        self.block_text = QPlainTextEdit()
-        self.block_text.setPlaceholderText(self._t("Texto do bloco selecionado"))
-        self.block_text.setMaximumHeight(100)
-        right_layout.addWidget(self.block_text)
-        right_layout.addWidget(self._button("Salvar correção e atualizar prévia", self._save_pdf_edit))
-
-        preview_tabs = QTabWidget()
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        self.pdf_page_image = FitImage(self._t("Selecione um bloco para ver a página original."))
-        scroll.setWidget(self.pdf_page_image)
-        preview_tabs.addTab(scroll, self._t("PDF original"))
-        self.pdf_preview = QTextBrowser()
-        preview_tabs.addTab(self.pdf_preview, self._t("Prévia do texto"))
-        right_layout.addWidget(preview_tabs)
-        splitter.addWidget(right)
-        splitter.setSizes([550, 730])
-        layout.addWidget(splitter, 1)
-        return root
-
-    def _manga_tab(self) -> QWidget:
-        root = QWidget()
-        layout = QVBoxLayout(root)
-        actions = QHBoxLayout()
-        actions.addWidget(self._button("Adicionar imagens", self._add_images, icon=QStyle.StandardPixmap.SP_DialogOpenButton))
-        actions.addWidget(self._button("Adicionar pasta", self._add_folder, icon=QStyle.StandardPixmap.SP_DirIcon))
-        actions.addWidget(self._button("Adicionar PDF", self._add_comic_pdf, icon=QStyle.StandardPixmap.SP_FileIcon))
-        actions.addWidget(self._button("Importar URL", self._add_url))
-        actions.addWidget(self._button("Exportar EPUB", self._export_manga, primary=True, icon=QStyle.StandardPixmap.SP_DialogSaveButton))
-        actions.addStretch()
-        layout.addLayout(actions)
-        metadata = QGroupBox(self._t("Dados da HQ"))
-        metadata.setFixedHeight(180)
-        form = QGridLayout(metadata)
-        self.manga_title = QLineEdit()
-        self.manga_author = QLineEdit()
-        self.manga_language = QLineEdit("pt-BR")
-        self.manga_rtl = QCheckBox(self._t("Leitura da direita para a esquerda"))
-        self.manga_rtl.setChecked(True)
-        for column, (label, field) in enumerate((("Título", self.manga_title), ("Autor", self.manga_author))):
-            form.addWidget(QLabel(self._t(label)), 0, column)
-            form.addWidget(field, 1, column)
-        form.addWidget(QLabel(self._t("Idioma")), 2, 0)
-        form.addWidget(QLabel(self._t("Direção")), 2, 1)
-        form.addWidget(self.manga_language, 3, 0)
-        form.addWidget(self.manga_rtl, 3, 1)
-        form.setColumnStretch(0, 3)
-        form.setColumnStretch(1, 2)
-        details = QHBoxLayout()
-        details.setSpacing(16)
-        details.addWidget(metadata, 2)
-        cover = QGroupBox(self._t("Capa"))
-        cover.setFixedHeight(180)
-        cover_row = QHBoxLayout(cover)
-        self.manga_cover_image = QLabel()
-        self.manga_cover_image.setFixedSize(78, 108)
-        self.manga_cover_image.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.manga_cover_image.setStyleSheet("background:#edf1f6; border-radius:6px;")
-        cover_row.addWidget(self.manga_cover_image)
-        cover_actions = QVBoxLayout()
-        self.manga_cover_info = QLabel(self._t("Escolha uma página ou adicione uma imagem."))
-        cover_actions.addWidget(self.manga_cover_info)
-        self.manga_cover_combo = QComboBox()
-        self.manga_cover_combo.addItem(self._t("Adicione páginas para escolher a capa"))
-        self.manga_cover_combo.setEnabled(False)
-        self.manga_cover_combo.currentIndexChanged.connect(self._manga_cover_changed)
-        cover_actions.addWidget(self.manga_cover_combo)
-        row = QHBoxLayout()
-        row.addWidget(self._button("Escolher imagem", self._add_manga_cover, icon=QStyle.StandardPixmap.SP_DialogOpenButton))
-        self.manga_clear_cover = self._button("Limpar capa", self._remove_manga_cover)
-        self.manga_clear_cover.setEnabled(False)
-        row.addWidget(self.manga_clear_cover)
-        cover_actions.addLayout(row)
-        cover_row.addLayout(cover_actions)
-        details.addWidget(cover, 3)
-        layout.addLayout(details)
-        manga_splitter = QSplitter(Qt.Orientation.Horizontal)
-        left = QWidget()
-        left_layout = QVBoxLayout(left)
-        section = QLabel(self._t("Páginas da HQ"))
-        section.setObjectName("sectionLabel")
-        left_layout.addWidget(section)
-        self.manga_list = QListWidget()
-        self.manga_list.currentRowChanged.connect(self._show_manga_page)
-        left_layout.addWidget(self.manga_list, 1)
-        page_actions = QHBoxLayout()
-        page_actions.addWidget(self._button("↑ Subir", lambda: self._move_page(-1)))
-        page_actions.addWidget(self._button("↓ Descer", lambda: self._move_page(1)))
-        page_actions.addWidget(self._button("Remover", self._remove_page))
-        page_actions.addWidget(self._button("Início de capítulo", self._set_manga_chapter))
-        left_layout.addLayout(page_actions)
-        manga_splitter.addWidget(left)
-        right = QWidget()
-        right_layout = QVBoxLayout(right)
-        section = QLabel(self._t("Prévia da página"))
-        section.setObjectName("sectionLabel")
-        right_layout.addWidget(section)
-        self.manga_image = FitImage(self._t("Selecione uma página para conferir."))
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setWidget(self.manga_image)
-        right_layout.addWidget(scroll, 1)
-        manga_splitter.addWidget(right)
-        manga_splitter.setSizes([350, 850])
-        layout.addWidget(manga_splitter, 1)
-        return root
+    def _new_preview(self, text):
+        preview = FitImage(self._t(text))
+        preview.setObjectName("canvas")
+        preview.setWordWrap(True)
+        preview.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
+        return preview
 
     def _start(self, label: str, function, done, *args):
         self._message(self._t(label))
@@ -434,6 +214,9 @@ class MainWindow(QMainWindow):
         self.selected_block = -1
         self.block_table.blockSignals(True)
         self.block_table.setRowCount(len(project.blocks))
+        self.block_stack.setCurrentIndex(1 if project.blocks else 0)
+        self.pdf_editor.setEnabled(bool(project.blocks))
+        self.pdf_export_button.setEnabled(bool(project.blocks))
         for row in range(len(project.blocks)):
             self._update_block_row(row)
         self.block_table.blockSignals(False)
@@ -583,6 +366,8 @@ class MainWindow(QMainWindow):
 
     def _refresh_manga_list(self):
         current = self.manga_list.currentRow()
+        self.manga_stack.setCurrentIndex(1 if self.manga.pages else 0)
+        self.manga_export_button.setEnabled(bool(self.manga.pages))
         self.manga_list.clear()
         for index, path in enumerate(self.manga.pages):
             marker = "★ " if index == self.manga.cover_index and not self.manga.custom_cover else ""
@@ -733,6 +518,7 @@ class MainWindow(QMainWindow):
 
 def main():
     app = QApplication([])
+    app.setStyle("Fusion")
     icon = Path(__file__).resolve().parent.parent / "assets" / "icon.png"
     if icon.is_file():
         app.setWindowIcon(QIcon(str(icon)))

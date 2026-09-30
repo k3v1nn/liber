@@ -37,7 +37,7 @@ O PDF importado nesta aba é convertido em páginas ilustradas para EPUB de layo
 
 ## Interface
 
-O seletor no canto superior direito alterna entre português e inglês. O painel azul no topo mostra o andamento e o resultado das tarefas. A capa tem um painel com prévia em cada modo.
+O seletor no canto superior direito alterna entre português e inglês. O painel azul no topo mostra o andamento e o resultado das tarefas. Dados e capa ficam na lateral; a estrutura e a prévia ocupam o espaço principal. Os botões com ícones mostram sua função ao passar o mouse e também possuem nomes acessíveis. A opção **Escolher imagem** permite adicionar uma capa própria.
 
 ## Executáveis
 

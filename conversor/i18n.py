@@ -3,6 +3,13 @@
 import re
 
 EN = {
+    "Sua biblioteca, do seu jeito.": "Your library, your way.",
+    "Estrutura do livro": "Book structure", "Revisão e prévia": "Review and preview",
+    "Seu livro começa aqui": "Your book starts here",
+    "Importe um PDF para organizar capítulos e revisar o texto.": "Import a PDF to organize chapters and review the text.",
+    "Uma página de cada vez": "One page at a time",
+    "Adicione imagens ou um PDF para montar sua HQ.": "Add images or a PDF to create your comic.",
+    "Páginas da HQ": "Comic pages", "Aplicar correção": "Apply edit",
     "Imagens (*.png *.jpg *.jpeg *.webp *.bmp *.tif *.tiff)": "Images (*.png *.jpg *.jpeg *.webp *.bmp *.tif *.tiff)",
     "Conversor EPUB": "EPUB Converter", "Livro em PDF": "PDF book", "Mangá / HQ": "Comics / manga",
     "Importe um PDF ou páginas de HQ para começar.": "Import a PDF or comic pages to get started.",
