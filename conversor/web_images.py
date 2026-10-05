@@ -8,7 +8,7 @@ from urllib.parse import urljoin, urlparse
 
 import requests
 from lxml import html
-from PIL import Image
+from PIL import Image, ImageOps
 
 
 MAX_IMAGE_BYTES = 25 * 1024 * 1024
@@ -33,6 +33,7 @@ def _download_image(session: requests.Session, url: str, destination: Path) -> b
                     return False
         with Image.open(io.BytesIO(data)) as image:
             image.load()
+            ImageOps.exif_transpose(image, in_place=True)
             if min(image.size) < 300:
                 return False
             image.save(destination, format="PNG", optimize=True)
@@ -56,6 +57,7 @@ def import_images_from_url(url: str, folder: str | Path) -> list[Path]:
     with session.get(url, timeout=20, stream=True) as response:
         response.raise_for_status()
         content_type = response.headers.get("Content-Type", "").lower()
+        page_url = response.url
         if content_type.startswith("image/"):
             target = folder / "page-0001.png"
             return [target] if _download_image(session, url, target) else []
@@ -73,7 +75,7 @@ def import_images_from_url(url: str, folder: str | Path) -> list[Path]:
         if not source and element.get("srcset"):
             source = element.get("srcset").split(",")[-1].strip().split(" ")[0]
         if source:
-            absolute = urljoin(url, source)
+            absolute = urljoin(page_url, source)
             if _http_url(absolute) and absolute not in candidates:
                 candidates.append(absolute)
         if len(candidates) >= MAX_GALLERY_IMAGES:

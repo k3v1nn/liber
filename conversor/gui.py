@@ -7,6 +7,9 @@ import re
 import tempfile
 from pathlib import Path
 
+from PIL import Image, ImageOps
+from PIL.ImageQt import ImageQt
+
 from PySide6.QtCore import QSettings, QSize, QThread, Qt, Signal
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import (
@@ -29,6 +32,18 @@ IMAGE_FILTER = "Imagens (*.png *.jpg *.jpeg *.webp *.bmp *.tif *.tiff)"
 
 def _natural_key(path: Path) -> list[int | str]:
     return [int(part) if part.isdigit() else part.casefold() for part in re.split(r"(\d+)", str(path))]
+
+
+def _read_oriented_pixmap(path: Path) -> QPixmap:
+    try:
+        with Image.open(path) as image:
+            image.load()
+            ImageOps.exif_transpose(image, in_place=True)
+            if image.mode not in {"1", "L", "P", "RGB", "RGBA"}:
+                image = image.convert("RGB")
+            return QPixmap.fromImage(ImageQt(image))
+    except (OSError, ValueError):
+        return QPixmap()
 
 
 class TaskThread(QThread):
@@ -112,8 +127,11 @@ class MainWindow(WorkspaceLayout, QMainWindow):
         brand.addWidget(self._label("Sua biblioteca, do seu jeito.", "subtitle"))
         top.addLayout(brand)
         top.addStretch()
-        top.addWidget(QLabel(self._t("Idioma da interface")))
+        language_label = QLabel(self._t("Idioma da interface"))
+        top.addWidget(language_label)
         self.ui_combo = QComboBox()
+        self.ui_combo.setAccessibleName(self._t("Idioma da interface"))
+        language_label.setBuddy(self.ui_combo)
         self.ui_combo.setFixedSize(120, 36)
         self.ui_combo.addItem("Português", "pt")
         self.ui_combo.addItem("English", "en")
@@ -320,7 +338,7 @@ class MainWindow(WorkspaceLayout, QMainWindow):
             self.pdf_cover_image.clear()
             return
         if self.pdf.custom_cover:
-            pixmap = QPixmap(str(self.pdf.custom_cover))
+            pixmap = _read_oriented_pixmap(self.pdf.custom_cover)
             self.pdf_cover_info.setText(f"{self._t('Capa customizada')}: {self.pdf.custom_cover.name}")
         else:
             pixmap = QPixmap()
@@ -430,7 +448,7 @@ class MainWindow(WorkspaceLayout, QMainWindow):
 
     def _show_manga_page(self, row: int):
         if 0 <= row < len(self.manga.pages):
-            image = QPixmap(str(self.manga.pages[row]))
+            image = _read_oriented_pixmap(self.manga.pages[row])
             self.manga_image.set_image(image)
         else:
             self.manga_image.set_image(QPixmap())
@@ -473,7 +491,7 @@ class MainWindow(WorkspaceLayout, QMainWindow):
         else:
             self.manga_cover_info.setText(self._t("Escolha uma página ou adicione uma imagem."))
         if source:
-            pixmap = QPixmap(str(source))
+            pixmap = _read_oriented_pixmap(source)
             self.manga_cover_image.setPixmap(pixmap.scaled(74, 104, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
         else:
             self.manga_cover_image.clear()
