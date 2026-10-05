@@ -49,6 +49,7 @@ EN = {
     "Epígrafe": "Epigraph", "Sumário": "Table of contents", "Bibliografia": "Bibliography",
     "Índice remissivo": "Index", "Escolha uma página ou adicione uma imagem.": "Choose a page or add an image.",
     "Editar estrutura": "Edit structure", "Páginas da HQ": "Comic pages",
+    "Bloco": "Block", "Importar e exportar": "Import and export",
 }
 
 ENGINE_MESSAGES = {

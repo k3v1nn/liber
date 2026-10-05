@@ -22,6 +22,8 @@ No Windows, use `.venv\Scripts\python.exe` no lugar de `.venv/bin/python`.
    Você também pode escolher uma imagem de capa própria sem alterar as páginas do livro.
 4. Exporte o EPUB de texto fluido. O leitor de EPUB controla o tamanho da fonte.
 
+O sumário do EPUB usa os títulos dos blocos classificados como **Capítulo**, inclusive quando o primeiro capítulo inicia o conteúdo do livro. Textos introdutórios anteriores ao primeiro capítulo continuam em uma seção separada.
+
 A análise detecta páginas com pouco texto, títulos por tamanho e padrões, possíveis capas e páginas iniciais, imagens e cabeçalhos/rodapés repetidos. Páginas escaneadas passam por OCR em português e inglês quando a biblioteca Tesseract está disponível no sistema. Os modelos de idioma estão incluídos em `resources/tessdata`. É uma primeira heurística, sujeita a correção na interface. Tabelas complexas, notas com referências cruzadas e formatação tipográfica detalhada ainda precisam de tratamento próprio.
 
 ## Mangá / HQ
@@ -31,13 +33,19 @@ A análise detecta páginas com pouco texto, títulos por tamanho e padrões, po
    Uma imagem de capa própria pode ser adicionada separadamente das páginas.
 3. Escolha a direção de leitura e exporte um EPUB de layout fixo.
 
+Ao importar uma galeria por URL, os caminhos relativos das imagens são resolvidos a partir do endereço final da página, inclusive após redirecionamentos HTTP.
+
 Sites que montam as imagens com JavaScript, exigem login ou oferecem apenas miniaturas podem precisar de arquivos baixados manualmente. O importador não contorna essas restrições.
 
 O PDF importado nesta aba é convertido em páginas ilustradas para EPUB de layout fixo. Para livros cujo texto deve se adaptar à tela, use a aba **Livro em PDF**.
 
+Páginas ilustradas e imagens de capa respeitam a orientação EXIF (rotação e espelhamento) na prévia e no EPUB. A importação por URL aplica essa orientação ao PNG baixado; a exportação não a aplica novamente. Os arquivos originais não são modificados.
+
 ## Interface
 
 O seletor no canto superior direito alterna entre português e inglês. O painel azul no topo mostra o andamento e o resultado das tarefas. Dados e capa ficam na lateral; a estrutura e a prévia ocupam o espaço principal. Os botões com ícones mostram sua função ao passar o mouse e também possuem nomes acessíveis. A opção **Escolher imagem** permite adicionar uma capa própria.
+
+A interface usa cartões e uma barra de ações para separar importação, dados e revisão, com contraste reforçado e indicação de foco nos controles. Campos e seletores possuem nomes acessíveis, e o painel lateral permite rolagem em janelas menores.
 
 ## Executáveis
 
@@ -59,6 +67,8 @@ O motor de análise está em `conversor/pdf_analysis.py`, a exportação em `con
 ```bash
 .venv/bin/python -m unittest discover -s tests -v
 ```
+
+Os testes de imagens da interface usam Qt em modo `offscreen`, sem precisar abrir uma janela nem alterar as preferências de idioma do usuário.
 
 O próximo passo de qualidade é testar com PDFs reais: livro digital, PDF escaneado, duas colunas e livro ilustrado. A detecção automática só pode ser calibrada com exemplos representativos.
 

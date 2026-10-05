@@ -8,7 +8,7 @@ import uuid
 from pathlib import Path
 
 from ebooklib import epub
-from PIL import Image
+from PIL import Image, ImageOps
 
 from .models import Block, MangaProject, PdfProject
 from .pdf_analysis import render_page
@@ -44,6 +44,7 @@ def _safe_text(value: str) -> str:
 def _image_png(data: bytes) -> bytes:
     with Image.open(io.BytesIO(data)) as image:
         image.load()
+        ImageOps.exif_transpose(image, in_place=True)
         result = io.BytesIO()
         image.convert("RGB").save(result, format="PNG", optimize=True)
         return result.getvalue()
@@ -95,9 +96,10 @@ def _section_groups(project: PdfProject) -> list[tuple[str, list[Block]]]:
                 current = []
                 current_title = role
             last_page = block.page
-        if block.role == "Capítulo" and current:
-            sections.append((current_title, current))
-            current = []
+        if block.role == "Capítulo":
+            if current:
+                sections.append((current_title, current))
+                current = []
             current_title = block.text[:100]
         if block.role != "Ignorar" and not (project.page_roles[block.page] == "Capa externa" and block.page == project.cover_page):
             current.append(block)
@@ -142,6 +144,7 @@ def export_pdf(project: PdfProject, destination: str | Path) -> None:
 def _manga_image(path: Path) -> tuple[bytes, str, str]:
     with Image.open(path) as image:
         image.load()
+        ImageOps.exif_transpose(image, in_place=True)
         output = io.BytesIO()
         if image.format == "PNG":
             image.save(output, format="PNG", optimize=True)
