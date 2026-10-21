@@ -17,6 +17,7 @@ SOURCE_FILES = [
     ROOT / "LICENSE", ROOT / "README.md", ROOT / "requirements.txt",
     ROOT / "build.py", ROOT / "run_app.py", ROOT / ".github" / "workflows" / "build.yml",
     ROOT / "assets" / "icon.png",
+    *sorted((ROOT / "assets" / "fonts").glob("*")),
     *sorted((ROOT / "conversor").glob("*.py")),
     *sorted((ROOT / "tests").glob("*.py")),
     *sorted((ROOT / "resources" / "tessdata").glob("*")),
@@ -36,6 +37,7 @@ def build() -> Path:
         mode, "--windowed", "--name", "ConversorEPUB",
         "--icon", str(ROOT / "assets" / "icon.png"),
         "--add-data", f"{ROOT / 'assets' / 'icon.png'}{':' if system != 'Windows' else ';'}assets",
+        "--add-data", f"{ROOT / 'assets' / 'fonts'}{':' if system != 'Windows' else ';'}assets/fonts",
         "--add-data", f"{ROOT / 'resources' / 'tessdata'}{':' if system != 'Windows' else ';'}resources/tessdata",
         str(ROOT / "run_app.py"),
     ], cwd=ROOT, check=True)

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import html
+import json
 import re
 import tempfile
 from pathlib import Path
@@ -10,12 +12,11 @@ from pathlib import Path
 from PIL import Image, ImageOps
 from PIL.ImageQt import ImageQt
 
-from PySide6.QtCore import QSettings, QSize, QThread, Qt, Signal
-from PySide6.QtGui import QIcon, QPixmap
+from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QSettings, QSize, QStandardPaths, QThread, QUrl, Qt, Signal
+from PySide6.QtGui import QDesktopServices, QIcon, QPixmap
 from PySide6.QtWidgets import (
-    QApplication, QFileDialog, QHBoxLayout, QInputDialog, QLabel,
-    QMainWindow, QMessageBox, QTabWidget, QTableWidgetItem, QVBoxLayout,
-    QSizePolicy, QWidget, QProgressBar,
+    QApplication, QFileDialog, QGraphicsOpacityEffect, QInputDialog, QListWidgetItem,
+    QMainWindow, QMessageBox, QStackedWidget,
 )
 
 from .epub_export import export_manga, export_pdf
@@ -24,14 +25,31 @@ from .models import MangaProject, PdfProject
 from .pdf_analysis import analyze_pdf, render_page
 from .web_images import import_images_from_url
 from .i18n import EN, translate_engine_message
-from .appearance import THEME, line_icon, CleanComboBox as QComboBox
+from .appearance import APP_NAME, PAPER, SERIF, THEME, app_icon, load_fonts
 from .ui_layout import WorkspaceLayout
+from .widgets import BLOCK_INDEX, BLOCK_LABEL, BLOCK_PAGE, BLOCK_ROLE, PAGE_CHAPTER, PAGE_COVER, PAGE_PATH
 
 
 IMAGE_FILTER = "Imagens (*.png *.jpg *.jpeg *.webp *.bmp *.tif *.tiff)"
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
+TYPE_LABELS = {"Imagem": "Imagem", "Nota": "Nota", "Legenda": "Legenda", "Ignorar": "Ignorado"}
+COVER_COLORS = (("#2f4a3f", PAPER), ("#a8772e", "#17130f"), ("#5a2330", PAPER), ("#24334a", PAPER),
+                ("#b8432b", PAPER), ("#3a3128", PAPER), ("#6d7b5b", PAPER), ("#22201d", "#c9a45c"))
+# Public-domain classics shown on the shelf until the first EPUB is created.
+SAMPLE_SHELF = (
+    ("Dom Casmurro", "Machado de Assis", "pdf"), ("Iracema", "José de Alencar", "pdf"), ("O Cortiço", "Aluísio Azevedo", "pdf"),
+    ("Kaze", "vol. 01", "manga"), ("Frankenstein", "Mary Shelley", "pdf"), ("Os Sertões", "Euclides da Cunha", "pdf"),
+    ("Alice", "Lewis Carroll", "pdf"), ("Ronin", "vol. 07", "manga"), ("Senhora", "José de Alencar", "pdf"),
+    ("Drácula", "Bram Stoker", "pdf"), ("Quincas Borba", "Machado de Assis", "pdf"), ("Mira", "vol. 03", "manga"),
+)
+
 
 def _natural_key(path: Path) -> list[int | str]:
     return [int(part) if part.isdigit() else part.casefold() for part in re.split(r"(\d+)", str(path))]
+
+
+def _images_in(folder: Path) -> list[Path]:
+    return sorted((p for p in folder.rglob("*") if p.suffix.lower() in IMAGE_EXTENSIONS), key=_natural_key)
 
 
 def _read_oriented_pixmap(path: Path) -> QPixmap:
@@ -62,44 +80,24 @@ class TaskThread(QThread):
             self.failed.emit(str(exc))
 
 
-class FitImage(QLabel):
-    def __init__(self, placeholder: str):
-        super().__init__(placeholder)
-        self.placeholder = placeholder
-        self.original = QPixmap()
-        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.setMinimumSize(160, 140)
-
-    def set_image(self, image: QPixmap):
-        self.original = image
-        if image.isNull():
-            self.setText(self.placeholder)
-            return
-        self.setText("")
-        self._fit()
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self._fit()
-
-    def _fit(self):
-        if not self.original.isNull():
-            size = QSize(max(1, self.width() - 16), max(1, self.height() - 16))
-            self.setPixmap(self.original.scaled(size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
-
-
 class MainWindow(WorkspaceLayout, QMainWindow):
     def __init__(self):
         super().__init__()
-        saved_language = QSettings("ConversorEPUB", "ConversorEPUB").value("ui_language", "pt")
+        load_fonts()
+        self.settings = QSettings("ConversorEPUB", "ConversorEPUB")
+        saved_language = self.settings.value("ui_language", "pt")
         self.ui_language = saved_language if saved_language in ("pt", "en") else "pt"
-        self.setWindowTitle("Conversor EPUB")
+        self.setWindowTitle(APP_NAME)
         self.resize(1280, 820)
+        self.setMinimumSize(780, 560)
+        self.setAcceptDrops(True)
         self.pdf: PdfProject | None = None
         self.manga = MangaProject()
         self.selected_block = -1
         self.tasks: list[TaskThread] = []
         self.temp_downloads: list[tempfile.TemporaryDirectory] = []
+        self.screen_name = "start"
+        self.mode = "pdf"
         self._build_ui()
 
     def _t(self, value: str) -> str:
@@ -107,67 +105,99 @@ class MainWindow(WorkspaceLayout, QMainWindow):
 
     def _message(self, value: str):
         self.activity.setText(value)
-        self.statusBar().showMessage(value)
 
     def _build_ui(self):
-        shell = QWidget()
-        shell.setObjectName("shell")
-        outer = QVBoxLayout(shell)
-        outer.setContentsMargins(22, 16, 22, 16)
-        outer.setSpacing(12)
-        top = QHBoxLayout()
-        title = QLabel(self._t("Conversor EPUB"))
-        title.setObjectName("brand")
-        symbol = QLabel()
-        symbol.setPixmap(line_icon("book", "#335fd1", 32).pixmap(32, 32))
-        top.addWidget(symbol)
-        brand = QVBoxLayout()
-        brand.setSpacing(2)
-        brand.addWidget(title)
-        brand.addWidget(self._label("Sua biblioteca, do seu jeito.", "subtitle"))
-        top.addLayout(brand)
-        top.addStretch()
-        language_label = QLabel(self._t("Idioma da interface"))
-        top.addWidget(language_label)
-        self.ui_combo = QComboBox()
-        self.ui_combo.setAccessibleName(self._t("Idioma da interface"))
-        language_label.setBuddy(self.ui_combo)
-        self.ui_combo.setFixedSize(120, 36)
-        self.ui_combo.addItem("Português", "pt")
-        self.ui_combo.addItem("English", "en")
-        self.ui_combo.setCurrentIndex(0 if self.ui_language == "pt" else 1)
-        self.ui_combo.currentIndexChanged.connect(self._change_language)
-        top.addWidget(self.ui_combo)
-        outer.addLayout(top)
-        self.activity = QLabel(self._t("Importe um PDF ou páginas de HQ para começar."))
-        self.activity.setObjectName("activity")
-        self.activity.setWordWrap(True)
-        outer.addWidget(self.activity)
-        self.progress = QProgressBar()
-        self.progress.setRange(0, 0)
-        self.progress.hide()
-        outer.addWidget(self.progress)
-        self.tabs = QTabWidget()
-        self.tabs.addTab(self._pdf_tab(), self._t("Livro em PDF"))
-        self.tabs.addTab(self._manga_tab(), self._t("Mangá / HQ"))
-        outer.addWidget(self.tabs, 1)
-        self.setCentralWidget(shell)
-        self.setStyleSheet(THEME)
-        self.setWindowTitle(self._t("Conversor EPUB"))
-        self.statusBar().hide()
+        self.language_toggles = []
+        self.text_buttons = []
+        self.add_buttons = []
+        self.editor_item = None
+        self.block_items: list[QListWidgetItem] = []
+        QApplication.instance().setStyleSheet(THEME)
+        self.screens = QStackedWidget()
+        self.screens.addWidget(self._start_screen())
+        self.screens.addWidget(self._workspace())
+        self.setCentralWidget(self.screens)
+        self._set_mode(self.mode)
+        self._fit_bar(self.width())
+        if self.screen_name == "start":
+            self._show_start()
+        else:
+            self.screens.setCurrentIndex(1)
 
-    def _change_language(self):
-        language = self.ui_combo.currentData()
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._fit_bar(self.width())
+
+    def _fit_bar(self, width: int):
+        for button in self.text_buttons:
+            button.setText("" if width < 920 else self._t(button.property("label")))
+        # The four comic sources shorten their labels before falling back to icons only.
+        for button in self.add_buttons:
+            label = button.property("label") if width >= 1080 else button.property("short") if width >= 920 else ""
+            button.setText(self._t(label) if label else "")
+
+    def _fit_hero(self, width: int):
+        self.hero_title.setStyleSheet(f"font-size: {60 if width >= 1100 else 50 if width >= 860 else 40}px;")
+
+    def _fade_in(self, widget, duration: int):
+        effect = QGraphicsOpacityEffect(widget)
+        widget.setGraphicsEffect(effect)
+        animation = QPropertyAnimation(effect, b"opacity", self)
+        animation.setStartValue(0.0)
+        animation.setEndValue(1.0)
+        animation.setDuration(duration)
+        animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        animation.finished.connect(lambda: widget.setGraphicsEffect(None))
+        animation.start()
+        self._animation = animation
+
+    def _show_start(self):
+        self.screen_name = "start"
+        self._refresh_shelf()
+        self.screens.setCurrentIndex(0)
+        self.shelf.restart()
+        self._fade_in(self.hero, 900)
+
+    def _show_workspace(self, mode: str):
+        self._set_mode(mode)
+        if self.screen_name != "workspace":
+            self.screen_name = "workspace"
+            self.screens.setCurrentIndex(1)
+            self._fade_in(self.screens.widget(1), 350)
+
+    def _set_mode(self, mode: str):
+        self.mode = mode
+        self.mode_stack.setCurrentIndex(0 if mode == "pdf" else 1)
+        self.tab_buttons[mode].setChecked(True)
+        self.pdf_import_button.setVisible(mode == "pdf")
+        self.manga_add_group.setVisible(mode == "manga")
+        self._refresh_status()
+
+    def _refresh_status(self):
+        en = self.ui_language == "en"
+        if self.mode == "pdf":
+            ready = bool(self.pdf and self.pdf.blocks)
+            summary = (f"{self.pdf.source.name} · {len(self.pdf.page_roles)} {'pages' if en else 'páginas'}") if self.pdf else ""
+        else:
+            ready = bool(self.manga.pages)
+            chapters = len([p for p in self.manga.pages if str(p) in self.manga.chapter_titles])
+            summary = (f"{len(self.manga.pages)} {'pages' if en else 'páginas'} · {chapters} {'chapters' if en else 'capítulos'}") if ready else ""
+        self.export_button.setEnabled(ready)
+        self.summary.setText(summary)
+
+    def _export_current(self):
+        self._export_pdf() if self.mode == "pdf" else self._export_manga()
+
+    def _change_language(self, language: str):
         if language == self.ui_language:
             return
         pdf_meta = (self.pdf_title.text(), self.pdf_author.text(), self.pdf_language.text())
         manga_meta = (self.manga_title.text(), self.manga_author.text(), self.manga_language.text(), self.manga_rtl.isChecked())
         self._save_pdf_edit(quiet=True)
-        tab = self.tabs.currentIndex()
         block = self.selected_block
         manga_row = self.manga_list.currentRow()
         self.ui_language = language
-        QSettings("ConversorEPUB", "ConversorEPUB").setValue("ui_language", language)
+        self.settings.setValue("ui_language", language)
         self._build_ui()
         self.pdf_title.setText(pdf_meta[0]); self.pdf_author.setText(pdf_meta[1]); self.pdf_language.setText(pdf_meta[2])
         self.manga_title.setText(manga_meta[0]); self.manga_author.setText(manga_meta[1]); self.manga_language.setText(manga_meta[2]); self.manga_rtl.setChecked(manga_meta[3])
@@ -177,20 +207,14 @@ class MainWindow(WorkspaceLayout, QMainWindow):
         self._refresh_manga_list()
         if manga_row >= 0:
             self.manga_list.setCurrentRow(manga_row)
-        self.tabs.setCurrentIndex(tab)
+        self._update_reading_direction()
         self._message(self._t("Pronto para começar"))
-
-    def _new_preview(self, text):
-        preview = FitImage(self._t(text))
-        preview.setObjectName("canvas")
-        preview.setWordWrap(True)
-        preview.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
-        return preview
 
     def _start(self, label: str, function, done, *args):
         self._message(self._t(label))
-        self.progress.show()
-        self.ui_combo.setEnabled(False)
+        self.ribbon.start()
+        for toggle in self.language_toggles:
+            toggle.setEnabled(False)
         task = TaskThread(function, *args)
         self.tasks.append(task)
         task.succeeded.connect(done)
@@ -202,18 +226,101 @@ class MainWindow(WorkspaceLayout, QMainWindow):
         if task in self.tasks:
             self.tasks.remove(task)
         if not self.tasks:
-            self.progress.hide()
-            self.ui_combo.setEnabled(True)
+            self.ribbon.stop()
+            for toggle in self.language_toggles:
+                toggle.setEnabled(True)
 
     def _error(self, message: str):
         message = translate_engine_message(message, self.ui_language)
         self._message(("Error: " if self.ui_language == "en" else "Falha: ") + message)
-        QMessageBox.critical(self, self._t("Conversor EPUB"), message)
+        QMessageBox.critical(self, APP_NAME, message)
+
+    def dragEnterEvent(self, event):
+        if any(url.isLocalFile() for url in event.mimeData().urls()):
+            event.acceptProposedAction()
+
+    def dropEvent(self, event):
+        paths = [Path(url.toLocalFile()) for url in event.mimeData().urls() if url.isLocalFile()]
+        images = []
+        for path in paths:
+            images.extend(_images_in(path) if path.is_dir() else [path] if path.suffix.lower() in IMAGE_EXTENSIONS else [])
+        pdfs = [path for path in paths if path.suffix.lower() == ".pdf"]
+        if images:
+            self._show_workspace("manga")
+            self._append_manga_pages(images)
+        elif pdfs and self.screen_name == "workspace" and self.mode == "manga":
+            self._add_comic_pdf(pdfs[0])
+        elif pdfs:
+            self._analyze_pdf(str(pdfs[0]))
+        else:
+            return
+        event.acceptProposedAction()
+
+    def _recents(self) -> list[dict]:
+        try:
+            recents = json.loads(self.settings.value("recent_epubs", "[]"))
+        except (TypeError, ValueError):
+            return []
+        return [entry for entry in recents if isinstance(entry, dict) and entry.get("path")] if isinstance(recents, list) else []
+
+    def _refresh_shelf(self):
+        recents = self._recents()
+        if recents:
+            books = []
+            for index, entry in enumerate(recents):
+                color, ink = COVER_COLORS[index % len(COVER_COLORS)]
+                cover = entry.get("cover")
+                books.append({"title": entry.get("title") or Path(entry["path"]).stem, "author": entry.get("author", ""),
+                              "kind": entry.get("kind"), "color": color, "ink": ink, "path": entry["path"],
+                              "cover": QPixmap(cover) if cover and Path(cover).is_file() else None})
+            while len(books) < 8:
+                books = books + books[:8 - len(books)]
+            caption = "Últimos EPUBs · clique para abrir a pasta"
+        else:
+            books = [{"title": title, "author": author, "kind": kind, "color": COVER_COLORS[i % len(COVER_COLORS)][0],
+                      "ink": COVER_COLORS[i % len(COVER_COLORS)][1]} for i, (title, author, kind) in enumerate(SAMPLE_SHELF)]
+            caption = "Sua estante começa aqui"
+        self.shelf.set_books(books)
+        self.shelf_caption.setText(self._t(caption).upper())
+
+    def _record_recent(self, kind: str, path: str):
+        project = self.pdf if kind == "pdf" else self.manga
+        entry = {"path": str(path), "title": project.title or Path(path).stem, "author": project.author, "kind": kind}
+        cover = QPixmap()
+        if project.custom_cover:
+            cover = _read_oriented_pixmap(project.custom_cover)
+        elif kind == "pdf":
+            cover.loadFromData(render_page(project.source, project.cover_page, width=360))
+        elif project.pages:
+            cover = _read_oriented_pixmap(project.pages[project.cover_index])
+        if not cover.isNull():
+            folder = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)) / "covers"
+            folder.mkdir(parents=True, exist_ok=True)
+            target = folder / f"{hashlib.sha1(str(path).encode()).hexdigest()[:16]}.png"
+            if cover.scaledToHeight(360, Qt.TransformationMode.SmoothTransformation).save(str(target)):
+                entry["cover"] = str(target)
+        recents = [item for item in self._recents() if item.get("path") != entry["path"]]
+        self.settings.setValue("recent_epubs", json.dumps([entry, *recents][:14], ensure_ascii=False))
+
+    def _export_done(self, kind: str, path: str):
+        self._message((f"EPUB saved to {path}" if self.ui_language == "en" else f"EPUB salvo em {path}"))
+        self._record_recent(kind, path)
+
+    def _open_recent(self, path: str):
+        folder = Path(path).parent
+        if folder.is_dir():
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
+        else:
+            self._error("The folder for this EPUB no longer exists." if self.ui_language == "en" else "A pasta deste EPUB não existe mais.")
 
     def _open_pdf(self):
         path, _ = QFileDialog.getOpenFileName(self, self._t("Escolher PDF"), "", "PDF (*.pdf)")
         if path:
-            self._start("Analisando PDF...", analyze_pdf, self._pdf_loaded, path)
+            self._analyze_pdf(path)
+
+    def _analyze_pdf(self, path: str):
+        self._show_workspace("pdf")
+        self._start("Analisando PDF...", analyze_pdf, self._pdf_loaded, path)
 
     def _pdf_loaded(self, project: PdfProject):
         self.pdf = project
@@ -230,14 +337,20 @@ class MainWindow(WorkspaceLayout, QMainWindow):
         if not project:
             return
         self.selected_block = -1
-        self.block_table.blockSignals(True)
-        self.block_table.setRowCount(len(project.blocks))
-        self.block_stack.setCurrentIndex(1 if project.blocks else 0)
-        self.pdf_editor.setEnabled(bool(project.blocks))
-        self.pdf_export_button.setEnabled(bool(project.blocks))
+        self.pdf_stack.setCurrentIndex(1 if project.blocks else 0)
+        self.block_list.blockSignals(True)
+        self.block_list.clear()
+        self.editor_item = None
+        self.block_items = []
         for row in range(len(project.blocks)):
+            item = QListWidgetItem()
+            self.block_list.addItem(item)
+            self.block_items.append(item)
             self._update_block_row(row)
-        self.block_table.blockSignals(False)
+        self.block_list.blockSignals(False)
+        self._apply_block_filter()
+        chapters = sum(block.role == "Capítulo" for block in project.blocks)
+        self.pdf_count.setText(f"{chapters} chapters · {len(project.blocks)} blocks" if self.ui_language == "en" else f"{chapters} capítulos · {len(project.blocks)} blocos")
         self.pdf_cover_combo.blockSignals(True)
         self.pdf_cover_combo.clear()
         for page in range(len(project.page_roles)):
@@ -247,33 +360,61 @@ class MainWindow(WorkspaceLayout, QMainWindow):
         self.pdf_cover_combo.setEnabled(True)
         self._refresh_pdf_cover()
         self._refresh_pdf_preview()
+        self._refresh_status()
         if project.blocks:
-            self.block_table.setCurrentCell(min(max(selected, 0), len(project.blocks) - 1), 0)
+            self.block_list.setCurrentItem(self.block_items[min(max(selected, 0), len(project.blocks) - 1)])
 
     def _update_block_row(self, row: int):
         if not self.pdf:
             return
         block = self.pdf.blocks[row]
-        summary = block.text[:130] if block.text else ("[image]" if self.ui_language == "en" else "[imagem]")
-        for col, value in enumerate((str(block.page + 1), self._t(block.role), summary)):
-            self.block_table.setItem(row, col, QTableWidgetItem(value))
+        item = self.block_items[row]
+        item.setText(block.text[:200] if block.text else ("[image]" if self.ui_language == "en" else "[imagem]"))
+        item.setData(BLOCK_INDEX, row)
+        item.setData(BLOCK_ROLE, block.role)
+        item.setData(BLOCK_PAGE, block.page + 1)
+        item.setData(BLOCK_LABEL, self._t(TYPE_LABELS[block.role]) if block.role in TYPE_LABELS else "")
 
-    def _select_pdf_block(self, row: int, _col: int, _old_row: int, _old_col: int):
-        if not self.pdf or row < 0 or row >= len(self.pdf.blocks):
+    def _filter_blocks(self, key: str):
+        self.block_filter = key
+        self._apply_block_filter()
+
+    def _apply_block_filter(self):
+        if not self.pdf:
+            return
+        for row, item in enumerate(self.block_items):
+            item.setHidden(self.block_filter != "all" and self.pdf.blocks[row].role != self.block_filter)
+        if self.editor_item is not None and 0 <= self.selected_block < len(self.block_items):
+            self.editor_item.setHidden(self.block_items[self.selected_block].isHidden())
+
+    def _select_pdf_item(self, current, _previous):
+        if not self.pdf or current is None or current.data(BLOCK_INDEX) is None:
             return
         self._save_pdf_edit(quiet=True)
-        block = self.pdf.blocks[row]
-        self.selected_block = row
-        self.page_role.blockSignals(True)
-        self.block_role.blockSignals(True)
-        self.page_role.setCurrentIndex(self.page_role.findData(self.pdf.page_roles[block.page]))
-        self.block_role.setCurrentIndex(self.block_role.findData(block.role))
-        self.page_role.blockSignals(False)
-        self.block_role.blockSignals(False)
-        self.block_text.setPlainText(block.text)
+        index = current.data(BLOCK_INDEX)
+        block = self.pdf.blocks[index]
+        self.selected_block = index
+        self._place_editor(current, block)
         image = QPixmap()
         image.loadFromData(render_page(self.pdf.source, block.page, width=1200))
         self.pdf_page_image.set_image(image)
+        self.pdf_preview.scrollToAnchor(f"b{index}")
+
+    def _place_editor(self, item: QListWidgetItem, block):
+        """Open the editor as a row right below the selected block."""
+        self.block_list.blockSignals(True)
+        if self.editor_item is not None:
+            self.block_list.takeItem(self.block_list.row(self.editor_item))
+        editor = self._block_editor(block)
+        self.editor_item = QListWidgetItem()
+        self.editor_item.setFlags(Qt.ItemFlag.NoItemFlags)
+        self.editor_item.setSizeHint(QSize(10, editor.sizeHint().height()))
+        self.block_list.insertItem(self.block_list.row(item) + 1, self.editor_item)
+        self.block_list.setItemWidget(self.editor_item, editor)
+        self.editor_item.setHidden(item.isHidden())
+        self.block_list.blockSignals(False)
+        self.block_list.scrollToItem(self.editor_item)
+        self.block_list.scrollToItem(item)
 
     def _page_role_changed(self, value: str):
         if self.pdf and self.selected_block >= 0:
@@ -282,7 +423,7 @@ class MainWindow(WorkspaceLayout, QMainWindow):
             self.pdf_cover_combo.setItemText(page, f"{self._t('Página')} {page + 1} · {self._t(self.pdf.page_roles[page])}")
 
     def _save_pdf_edit(self, quiet: bool = False):
-        if not self.pdf or self.selected_block < 0:
+        if not self.pdf or self.selected_block < 0 or self.editor_item is None:
             return
         block = self.pdf.blocks[self.selected_block]
         block.role = self.block_role.currentData()
@@ -304,28 +445,33 @@ class MainWindow(WorkspaceLayout, QMainWindow):
             self._message("Move blocks within the same page." if self.ui_language == "en" else "Reordene blocos dentro da mesma página.")
             return
         self.pdf.blocks[row], self.pdf.blocks[target] = self.pdf.blocks[target], self.pdf.blocks[row]
-        self._update_block_row(row)
-        self._update_block_row(target)
-        self.selected_block = -1
-        self.block_table.setCurrentCell(target, 0)
-        self._refresh_pdf_preview()
+        self._populate_pdf(target)
 
     def _refresh_pdf_preview(self):
         if not self.pdf:
             return
-        parts = ["<html><body style='font-family:serif;line-height:1.5;margin:2em'>"]
-        for block in self.pdf.blocks:
+        parts = [f"<html><body style=\"font-family:'{SERIF}', serif; font-size:15px; color:#2a221b\">"]
+        for index, block in enumerate(self.pdf.blocks):
             if block.role == "Ignorar":
                 continue
+            anchor = f'<a name="b{index}"></a>'
             if block.role == "Imagem":
                 caption = f"Image on page {block.page + 1}" if self.ui_language == "en" else f"Imagem da página {block.page + 1}"
-                parts.append(f"<p><i>[{caption}]</i></p>")
+                parts.append(f"<p align='center' style='color:#9a8b76; font-size:13px'>{anchor}<i>[{caption}]</i></p>")
                 continue
-            tag = {"Capítulo": "h1", "Seção": "h2", "Nota": "small"}.get(block.role, "p")
             text = block.rich_html if block.rich_html and block.text == block.source_text else html.escape(block.text)
-            parts.append(f"<{tag}>{text}</{tag}>")
+            if block.role == "Capítulo":
+                parts.append(f"<h1 align='center' style='font-weight:400; font-size:24px; margin-top:26px; margin-bottom:14px'>{anchor}{text}</h1>")
+            elif block.role == "Seção":
+                parts.append(f"<h2 style='font-weight:400; font-size:19px; margin-top:18px'>{anchor}{text}</h2>")
+            elif block.role in ("Nota", "Legenda"):
+                parts.append(f"<p align='{'center' if block.role == 'Legenda' else 'left'}' style='font-size:12px; color:#6b5d4d'>{anchor}{text}</p>")
+            else:
+                parts.append(f"<p style='text-indent:20px; margin-top:0; margin-bottom:6px; line-height:150%'>{anchor}{text}</p>")
         parts.append("</body></html>")
         self.pdf_preview.setHtml("".join(parts))
+        if self.selected_block >= 0:
+            self.pdf_preview.scrollToAnchor(f"b{self.selected_block}")
 
     def _pdf_cover_changed(self):
         if self.pdf and self.pdf_cover_combo.currentIndex() >= 0:
@@ -335,16 +481,18 @@ class MainWindow(WorkspaceLayout, QMainWindow):
 
     def _refresh_pdf_cover(self):
         if not self.pdf:
-            self.pdf_cover_image.clear()
+            self.pdf_cover_image.set_image(QPixmap())
             return
+        info = ""
         if self.pdf.custom_cover:
             pixmap = _read_oriented_pixmap(self.pdf.custom_cover)
-            self.pdf_cover_info.setText(f"{self._t('Capa customizada')}: {self.pdf.custom_cover.name}")
+            info = f"{self._t('Capa customizada')}: {self.pdf.custom_cover.name}"
         else:
             pixmap = QPixmap()
-            pixmap.loadFromData(render_page(self.pdf.source, self.pdf.cover_page, width=240))
-            self.pdf_cover_info.setText(f"{self._t('Página')} {self.pdf.cover_page + 1} · {self._t(self.pdf.page_roles[self.pdf.cover_page])}")
-        self.pdf_cover_image.setPixmap(pixmap.scaled(74, 104, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+            pixmap.loadFromData(render_page(self.pdf.source, self.pdf.cover_page, width=360))
+        self.pdf_cover_image.set_image(pixmap)
+        self.pdf_cover_info.setText(info)
+        self.pdf_cover_info.setVisible(bool(info))
         self.pdf_clear_cover.setEnabled(self.pdf.custom_cover is not None)
 
     def _add_pdf_cover(self):
@@ -374,7 +522,10 @@ class MainWindow(WorkspaceLayout, QMainWindow):
             return
         path, _ = QFileDialog.getSaveFileName(self, self._t("Salvar EPUB"), self.pdf.source.with_suffix(".epub").name, "EPUB (*.epub)")
         if path:
-            self._start("Gerando EPUB...", export_pdf, lambda _: self._message((f"EPUB saved to {path}" if self.ui_language == "en" else f"EPUB salvo em {path}")), self.pdf, path)
+            self._start("Gerando EPUB...", export_pdf, lambda _: self._export_done("pdf", path), self.pdf, path)
+
+    def _load_page_pixmap(self, path: str) -> QPixmap:
+        return _read_oriented_pixmap(Path(path))
 
     def _append_manga_pages(self, paths: list[Path]):
         existing = set(self.manga.pages)
@@ -384,26 +535,35 @@ class MainWindow(WorkspaceLayout, QMainWindow):
 
     def _refresh_manga_list(self):
         current = self.manga_list.currentRow()
-        self.manga_stack.setCurrentIndex(1 if self.manga.pages else 0)
-        self.manga_export_button.setEnabled(bool(self.manga.pages))
+        pages = self.manga.pages
+        self.manga_stack.setCurrentIndex(1 if pages else 0)
+        self.manga_list.blockSignals(True)
         self.manga_list.clear()
-        for index, path in enumerate(self.manga.pages):
-            marker = "★ " if index == self.manga.cover_index and not self.manga.custom_cover else ""
-            chapter = self.manga.chapter_titles.get(str(path))
-            chapter_marker = f"  •  {chapter}" if chapter else ""
-            self.manga_list.addItem(f"{marker}{index + 1:03d} — {path.name}{chapter_marker}")
+        for index, path in enumerate(pages):
+            item = QListWidgetItem(f"{index + 1:03d}")
+            item.setData(PAGE_PATH, str(path))
+            item.setData(PAGE_COVER, index == self.manga.cover_index and not self.manga.custom_cover)
+            item.setData(PAGE_CHAPTER, self.manga.chapter_titles.get(str(path), ""))
+            item.setToolTip(path.name)
+            self.manga_list.addItem(item)
+        self.manga_list.blockSignals(False)
         self.manga_cover_combo.blockSignals(True)
         self.manga_cover_combo.clear()
-        for index, path in enumerate(self.manga.pages):
+        for index, path in enumerate(pages):
             self.manga_cover_combo.addItem(f"{self._t('Página')} {index + 1} · {path.name}", index)
-        if not self.manga.pages:
+        if not pages:
             self.manga_cover_combo.addItem(self._t("Adicione páginas para escolher a capa"))
-        self.manga_cover_combo.setCurrentIndex(self.manga.cover_index if self.manga.pages else 0)
+        self.manga_cover_combo.setCurrentIndex(self.manga.cover_index if pages else 0)
         self.manga_cover_combo.blockSignals(False)
-        self.manga_cover_combo.setEnabled(bool(self.manga.pages))
-        if self.manga.pages:
-            self.manga_list.setCurrentRow(min(max(current, 0), len(self.manga.pages) - 1))
+        self.manga_cover_combo.setEnabled(bool(pages))
+        chapters = len([p for p in pages if str(p) in self.manga.chapter_titles])
+        self.manga_count.setText(f"{len(pages)} pages · {chapters} chapters" if self.ui_language == "en" else f"{len(pages)} páginas · {chapters} capítulos")
+        if pages:
+            self.manga_list.setCurrentRow(min(max(current, 0), len(pages) - 1))
+        else:
+            self._show_manga_page(-1)
         self._refresh_manga_cover()
+        self._refresh_status()
 
     def _add_images(self):
         paths, _ = QFileDialog.getOpenFileNames(self, self._t("Escolher imagens"), "", self._t(IMAGE_FILTER))
@@ -413,17 +573,17 @@ class MainWindow(WorkspaceLayout, QMainWindow):
     def _add_folder(self):
         path = QFileDialog.getExistingDirectory(self, self._t("Escolher pasta de imagens"))
         if path:
-            extensions = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
-            pages = sorted((p for p in Path(path).rglob("*") if p.suffix.lower() in extensions), key=_natural_key)
-            self._append_manga_pages(pages)
+            self._append_manga_pages(_images_in(Path(path)))
 
-    def _add_comic_pdf(self):
-        path, _ = QFileDialog.getOpenFileName(self, self._t("Escolher PDF de HQ"), "", "PDF (*.pdf)")
-        if not path:
-            return
-        source = Path(path)
+    def _add_comic_pdf(self, source: Path | None = None):
+        if source is None:
+            path, _ = QFileDialog.getOpenFileName(self, self._t("Escolher PDF de HQ"), "", "PDF (*.pdf)")
+            if not path:
+                return
+            source = Path(path)
         temp = tempfile.TemporaryDirectory(prefix="conversor-epub-pdf-hq-")
         self.temp_downloads.append(temp)
+        self._show_workspace("manga")
         self._start("Convertendo páginas do PDF...", import_comic_pdf,
                     lambda pages: self._comic_pdf_loaded(pages, source), source, temp.name)
 
@@ -447,11 +607,32 @@ class MainWindow(WorkspaceLayout, QMainWindow):
         self._append_manga_pages(paths)
 
     def _show_manga_page(self, row: int):
-        if 0 <= row < len(self.manga.pages):
-            image = _read_oriented_pixmap(self.manga.pages[row])
-            self.manga_image.set_image(image)
-        else:
+        if not 0 <= row < len(self.manga.pages):
             self.manga_image.set_image(QPixmap())
+            self.manga_caption.setText("")
+            return
+        path = self.manga.pages[row]
+        self.manga_image.set_image(_read_oriented_pixmap(path))
+        chapter = next((self.manga.chapter_titles[str(p)] for p in reversed(self.manga.pages[:row + 1]) if str(p) in self.manga.chapter_titles), "")
+        cover = row == self.manga.cover_index and not self.manga.custom_cover
+        self.manga_caption.setText(" · ".join(part for part in (path.name, chapter, self._t("Capa").lower() if cover else "") if part))
+        self._update_reading_direction()
+
+    def _update_reading_direction(self):
+        self.manga_direction.setText(self._t("← direita para a esquerda") if self.manga_rtl.isChecked() else self._t("esquerda para a direita →"))
+
+    def _manga_reordered(self):
+        paths = [Path(self.manga_list.item(i).data(PAGE_PATH)) for i in range(self.manga_list.count())]
+        if sorted(map(str, paths)) != sorted(map(str, self.manga.pages)):
+            self._refresh_manga_list()
+            return
+        cover = self.manga.pages[self.manga.cover_index] if self.manga.pages else None
+        row = self.manga_list.currentRow()
+        self.manga.pages = paths
+        if cover in paths:
+            self.manga.cover_index = paths.index(cover)
+        self._refresh_manga_list()
+        self.manga_list.setCurrentRow(row)
 
     def _move_page(self, step: int):
         row = self.manga_list.currentRow()
@@ -475,6 +656,14 @@ class MainWindow(WorkspaceLayout, QMainWindow):
             self.manga.cover_index = min(self.manga.cover_index, max(0, len(self.manga.pages) - 1))
             self._refresh_manga_list()
 
+    def _use_page_as_cover(self):
+        row = self.manga_list.currentRow()
+        if 0 <= row < len(self.manga.pages):
+            self.manga.cover_index = row
+            self.manga.custom_cover = None
+            self._refresh_manga_list()
+            self.manga_list.setCurrentRow(row)
+
     def _manga_cover_changed(self):
         if self.manga_cover_combo.currentIndex() >= 0 and self.manga.pages:
             self.manga.cover_index = self.manga_cover_combo.currentData()
@@ -483,29 +672,23 @@ class MainWindow(WorkspaceLayout, QMainWindow):
 
     def _refresh_manga_cover(self):
         source = self.manga.custom_cover
-        if source:
-            self.manga_cover_info.setText(f"{self._t('Capa customizada')}: {source.name}")
-        elif self.manga.pages:
+        info = f"{self._t('Capa customizada')}: {source.name}" if source else ""
+        if not source and self.manga.pages:
             source = self.manga.pages[self.manga.cover_index]
-            self.manga_cover_info.setText(f"{self._t('Página')} {self.manga.cover_index + 1} · {source.name}")
-        else:
-            self.manga_cover_info.setText(self._t("Escolha uma página ou adicione uma imagem."))
-        if source:
-            pixmap = _read_oriented_pixmap(source)
-            self.manga_cover_image.setPixmap(pixmap.scaled(74, 104, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
-        else:
-            self.manga_cover_image.clear()
+        self.manga_cover_image.set_image(_read_oriented_pixmap(source) if source else QPixmap())
+        self.manga_cover_info.setText(info)
+        self.manga_cover_info.setVisible(bool(info))
         self.manga_clear_cover.setEnabled(self.manga.custom_cover is not None)
 
     def _add_manga_cover(self):
         path, _ = QFileDialog.getOpenFileName(self, self._t("Escolher imagem de capa"), "", self._t(IMAGE_FILTER))
         if path:
             self.manga.custom_cover = Path(path)
-            self._refresh_manga_cover()
+            self._refresh_manga_list()
 
     def _remove_manga_cover(self):
         self.manga.custom_cover = None
-        self._refresh_manga_cover()
+        self._refresh_manga_list()
 
     def _set_manga_chapter(self):
         row = self.manga_list.currentRow()
@@ -520,6 +703,7 @@ class MainWindow(WorkspaceLayout, QMainWindow):
             else:
                 self.manga.chapter_titles.pop(str(page), None)
             self._refresh_manga_list()
+            self.manga_list.setCurrentRow(row)
 
     def _export_manga(self):
         if not self.manga.pages:
@@ -531,15 +715,15 @@ class MainWindow(WorkspaceLayout, QMainWindow):
         self.manga.right_to_left = self.manga_rtl.isChecked()
         path, _ = QFileDialog.getSaveFileName(self, self._t("Salvar EPUB"), f"{self.manga.title}.epub", "EPUB (*.epub)")
         if path:
-            self._start("Gerando EPUB de HQ...", export_manga, lambda _: self._message((f"EPUB saved to {path}" if self.ui_language == "en" else f"EPUB salvo em {path}")), self.manga, path)
+            self._start("Gerando EPUB de HQ...", export_manga, lambda _: self._export_done("manga", path), self.manga, path)
 
 
 def main():
     app = QApplication([])
     app.setStyle("Fusion")
-    icon = Path(__file__).resolve().parent.parent / "assets" / "icon.png"
-    if icon.is_file():
-        app.setWindowIcon(QIcon(str(icon)))
+    app.setApplicationName(APP_NAME)
+    load_fonts()
+    app.setWindowIcon(QIcon(app_icon(256)))
     window = MainWindow()
     window.show()
     app.exec()
