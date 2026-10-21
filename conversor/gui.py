@@ -81,10 +81,10 @@ class TaskThread(QThread):
 
 
 class MainWindow(WorkspaceLayout, QMainWindow):
-    def __init__(self):
+    def __init__(self, settings: QSettings | None = None):
         super().__init__()
         load_fonts()
-        self.settings = QSettings("ConversorEPUB", "ConversorEPUB")
+        self.settings = settings or QSettings("ConversorEPUB", "ConversorEPUB")
         saved_language = self.settings.value("ui_language", "pt")
         self.ui_language = saved_language if saved_language in ("pt", "en") else "pt"
         self.setWindowTitle(APP_NAME)

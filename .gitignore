@@ -6,6 +6,7 @@ __pycache__/
 *.pdf
 *.png
 !assets/icon.png
+!docs/screenshots/*.png
 *.jpg
 *.jpeg
 *.webp

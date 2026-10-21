@@ -28,11 +28,9 @@ class WorkspaceTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
-        # Keep the user's real language choice and shelf untouched.
-        for fmt in (QSettings.Format.NativeFormat, QSettings.Format.IniFormat):
-            QSettings.setPath(fmt, QSettings.Scope.UserScope, str(self.root / "settings"))
-        QSettings("ConversorEPUB", "ConversorEPUB").clear()
-        self.window = MainWindow()
+        # A throwaway INI file keeps the user's real language choice and shelf untouched on every platform.
+        self.settings = QSettings(str(self.root / "settings.ini"), QSettings.Format.IniFormat)
+        self.window = MainWindow(self.settings)
 
     def tearDown(self):
         self.window.close()
@@ -107,7 +105,7 @@ class WorkspaceTests(unittest.TestCase):
         target.touch()
         with patch("conversor.gui.QStandardPaths.writableLocation", return_value=str(self.root / "data")):
             self.window._export_done("pdf", str(target))
-        recents = json.loads(QSettings("ConversorEPUB", "ConversorEPUB").value("recent_epubs"))
+        recents = json.loads(self.settings.value("recent_epubs"))
         self.assertEqual(recents[0]["path"], str(target))
         self.assertTrue(Path(recents[0]["cover"]).is_file())
         self.window._show_start()

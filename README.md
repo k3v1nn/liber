@@ -1,12 +1,118 @@
-# Liber
+<p align="center">
+  <img src="assets/icon.png" width="96" alt="Ícone do Liber">
+</p>
 
-Aplicativo local para criar EPUBs a partir de livros em PDF ou páginas de mangá/HQ. Os arquivos são processados no computador.
+<h1 align="center">Liber</h1>
 
-*Liber* é “livro” em latim, e também “livre”.
+<p align="center">
+  <strong>Converta PDF, mangá e HQ em EPUB.</strong><br>
+  Revise capítulos, capa e ordem das páginas antes de gerar o arquivo. Tudo no seu computador.
+</p>
 
-## Executar
+<p align="center">
+  <a href="https://github.com/k3v1nn/conversor-de-epub/releases"><img alt="Baixar" src="https://img.shields.io/badge/baixar-Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-b8432b"></a>
+  <img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-2f4a3f">
+  <a href="LICENSE"><img alt="Licença AGPL-3.0" src="https://img.shields.io/badge/licen%C3%A7a-AGPL--3.0-17130f"></a>
+</p>
 
-Requer Python 3.10 ou superior. No Linux, Windows ou macOS:
+<p align="center">
+  <a href="#baixar">Baixar</a> ·
+  <a href="#como-usar">Como usar</a> ·
+  <a href="#executar-a-partir-do-código">Código</a> ·
+  <a href="#english">English</a>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/abertura.gif" width="800" alt="Abertura do Liber: livros caem e formam uma estante curva abaixo do título">
+</p>
+
+*Liber* é “livro” em latim, e também “livre”. O aplicativo transforma PDFs em EPUBs de texto fluido e páginas de mangá ou HQ em EPUBs de layout fixo, com uma etapa de revisão no meio. Nenhum arquivo é enviado para a internet.
+
+## Recursos
+
+**Livro em PDF → EPUB de texto fluido**
+
+- Detecta capítulos, títulos, imagens, notas, possíveis capas e páginas iniciais.
+- Remove cabeçalhos, rodapés e números de página repetidos.
+- Faz OCR em português e inglês nas páginas escaneadas, quando o Tesseract está instalado no sistema.
+- Mostra a estrutura como um sumário: clique num bloco para corrigir o texto, mudar o tipo do bloco ou da página e reordenar.
+- Compara a prévia do EPUB com a página original do PDF.
+- Usa como capa uma página do PDF ou uma imagem sua.
+
+![Livro em PDF: dados do livro, estrutura com editor aberto e prévia do EPUB](docs/screenshots/livro-pdf.png)
+
+**Mangá / HQ → EPUB de layout fixo**
+
+- Importa imagens, uma pasta inteira (em ordem natural: 2 antes de 10), um PDF de HQ ou as imagens visíveis de uma URL pública.
+- Reordena as páginas arrastando as miniaturas.
+- Marca a capa (★) e o início de cada capítulo (fita vermelha).
+- Lê da direita para a esquerda ou da esquerda para a direita.
+- Respeita a rotação e o espelhamento EXIF das fotos.
+
+![Mangá / HQ: miniaturas das páginas com capítulos e prévia da página](docs/screenshots/manga-hq.png)
+
+**Interface**
+
+- A tela inicial mostra os últimos EPUBs gerados numa estante. Clique num livro para abrir a pasta dele.
+- Arraste um PDF, imagens ou uma pasta para qualquer ponto da janela.
+- O layout se adapta a janelas estreitas, e a interface está em português e inglês.
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/livro-pdf-original.png" alt="Prévia da página original do PDF"></td>
+    <td width="50%"><img src="docs/screenshots/janela-estreita.png" alt="Layout em janela estreita"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Página original do PDF ao lado da estrutura</sub></td>
+    <td align="center"><sub>Janela estreita: os dados do livro passam para o topo</sub></td>
+  </tr>
+</table>
+
+## Baixar
+
+Os executáveis ficam em **[Releases](https://github.com/k3v1nn/conversor-de-epub/releases)**. Baixe só o ZIP do seu sistema e extraia antes de abrir:
+
+| Sistema | Arquivo | Abrir |
+| --- | --- | --- |
+| Windows 64 bits | `ConversorEPUB-windows-x64.zip` | `ConversorEPUB.exe` |
+| macOS com chip Apple (M1 ou posterior) | `ConversorEPUB-macos-arm64.zip` | `ConversorEPUB.app` |
+| macOS Intel | `ConversorEPUB-macos-x64.zip` | `ConversorEPUB.app` |
+| Linux 64 bits | `ConversorEPUB-linux-x64.zip` | `ConversorEPUB` |
+
+Não é preciso instalar Python. Cada ZIP inclui a licença e o código-fonte correspondente.
+
+Os aplicativos ainda não têm assinatura digital:
+
+- **macOS:** se a primeira abertura for bloqueada, tente abrir o app e depois acesse **Ajustes do Sistema → Privacidade e Segurança → Abrir Mesmo Assim**.
+- **Windows:** se aparecer o aviso do SmartScreen, confira a origem do arquivo e escolha **Mais informações → Executar assim mesmo**.
+- **Linux:** o executável gerado em distribuições recentes pode exigir uma versão igualmente recente da glibc.
+
+## Como usar
+
+### Livro em PDF
+
+1. Clique em **Livro em PDF** e importe o arquivo, ou arraste o PDF para a janela.
+2. Revise a **Estrutura**. Ao selecionar um bloco, o editor abre logo abaixo dele: corrija o texto, troque o tipo (Capítulo, Parágrafo, Nota, Imagem, Ignorar…) e aplique. As setas reordenam blocos dentro da mesma página, e os filtros mostram só capítulos, notas, imagens ou blocos ignorados.
+3. Escolha a capa: uma página do PDF ou uma imagem própria.
+4. Clique em **Gerar EPUB**. O leitor de e-book controla fonte e tamanho do texto.
+
+O sumário do EPUB usa os blocos marcados como **Capítulo**. Textos antes do primeiro capítulo ficam numa seção separada.
+
+### Mangá / HQ
+
+1. Clique em **Mangá / HQ** e adicione as páginas por **Imagens**, **Pasta**, **PDF de HQ** ou **URL pública**. Cada página de um PDF de HQ vira uma imagem, na ordem original.
+2. Arraste as miniaturas para reordenar, marque a capa e os inícios de capítulo.
+3. Defina a direção de leitura e clique em **Gerar EPUB**.
+
+Na importação por URL, os caminhos relativos das imagens são resolvidos a partir do endereço final da página, inclusive após redirecionamentos. Sites que montam as imagens com JavaScript, exigem login ou oferecem só miniaturas podem precisar de arquivos baixados manualmente. O importador não contorna essas restrições. Confira se você tem autorização para baixar e reutilizar o conteúdo.
+
+### Privacidade
+
+PDFs e imagens são processados localmente. O único acesso à rede é a importação por URL, quando você pede para baixar as imagens de uma página. Os arquivos originais nunca são modificados.
+
+## Executar a partir do código
+
+Requer Python 3.10 ou superior:
 
 ```bash
 python3 -m venv .venv
@@ -16,79 +122,50 @@ python3 -m venv .venv
 
 No Windows, use `.venv\Scripts\python.exe` no lugar de `.venv/bin/python`.
 
-## Livro em PDF
-
-1. Importe o PDF.
-2. Revise os blocos identificados. Você pode mudar o tipo de um bloco, corrigir o texto, alterar a classificação da página e reordenar blocos dentro da mesma página.
-3. Escolha a página usada como capa e confira a prévia.
-   Você também pode escolher uma imagem de capa própria sem alterar as páginas do livro.
-4. Exporte o EPUB de texto fluido. O leitor de EPUB controla o tamanho da fonte.
-
-O sumário do EPUB usa os títulos dos blocos classificados como **Capítulo**, inclusive quando o primeiro capítulo inicia o conteúdo do livro. Textos introdutórios anteriores ao primeiro capítulo continuam em uma seção separada.
-
-A análise detecta páginas com pouco texto, títulos por tamanho e padrões, possíveis capas e páginas iniciais, imagens e cabeçalhos/rodapés repetidos. Páginas escaneadas passam por OCR em português e inglês quando a biblioteca Tesseract está disponível no sistema. Os modelos de idioma estão incluídos em `resources/tessdata`. É uma primeira heurística, sujeita a correção na interface. Tabelas complexas, notas com referências cruzadas e formatação tipográfica detalhada ainda precisam de tratamento próprio.
-
-## Mangá / HQ
-
-1. Adicione imagens, uma pasta ou um PDF de HQ. Cada página do PDF entra na lista como imagem, na ordem original. Também é possível importar imagens visíveis de uma URL pública; confira se você tem autorização para baixar e reutilizar o conteúdo.
-2. Revise a ordem, marque a capa e os inícios de capítulo.
-   Uma imagem de capa própria pode ser adicionada separadamente das páginas.
-3. Escolha a direção de leitura e exporte um EPUB de layout fixo.
-
-Ao importar uma galeria por URL, os caminhos relativos das imagens são resolvidos a partir do endereço final da página, inclusive após redirecionamentos HTTP.
-
-Sites que montam as imagens com JavaScript, exigem login ou oferecem apenas miniaturas podem precisar de arquivos baixados manualmente. O importador não contorna essas restrições.
-
-O PDF importado nesta aba é convertido em páginas ilustradas para EPUB de layout fixo. Para livros cujo texto deve se adaptar à tela, use a aba **Livro em PDF**.
-
-Páginas ilustradas e imagens de capa respeitam a orientação EXIF (rotação e espelhamento) na prévia e no EPUB. A importação por URL aplica essa orientação ao PNG baixado; a exportação não a aplica novamente. Os arquivos originais não são modificados.
-
-## Interface
-
-O aplicativo abre numa tela escura com os dois caminhos, **Livro em PDF** e **Mangá / HQ**, e uma estante curva com os últimos EPUBs gerados. Clicar num livro da estante abre a pasta do arquivo. Antes do primeiro EPUB, a estante mostra clássicos em domínio público. Também é possível arrastar um PDF, imagens ou uma pasta para qualquer ponto da janela.
-
-A área de trabalho usa fundo de papel e três colunas:
-
-- **Livro** ou **HQ**: título, autor, idioma e capa. Na HQ, o interruptor define a leitura da direita para a esquerda.
-- **Estrutura** (PDF): os blocos aparecem como um sumário, com capítulos em destaque, até duas linhas de texto por parágrafo e um selo para notas, imagens, legendas e blocos ignorados. Ao selecionar um bloco, o editor abre logo abaixo dele, com o tipo do bloco, o tipo da página, o texto, **Aplicar correção** e as setas para reordenar. Os filtros mostram só capítulos, notas, imagens ou blocos ignorados.
-- **Páginas** (HQ): miniaturas que podem ser arrastadas para mudar a ordem. A ★ marca a capa e a fita vermelha marca o início de capítulo.
-- **Prévia**: a página EPUB ou a página original do PDF.
-
-As quatro formas de adicionar páginas de HQ (**Imagens**, **Pasta**, **PDF de HQ** e **URL pública**) ficam visíveis na barra superior e na tela vazia. A fita vermelha sob a barra superior indica uma tarefa em andamento, e o rodapé mostra a última mensagem. Em janelas mais estreitas, os dados do livro passam para uma faixa no topo e, abaixo de 860 px, as colunas ficam empilhadas. O seletor **PT · EN** alterna o idioma.
-
-As fontes Fraunces e Inter vêm em `assets/fonts`, sob a SIL Open Font License 1.1 (`Fraunces-OFL.txt` e `Inter-OFL.txt`).
-
-## Executáveis
-
-Baixe o ZIP do seu sistema na seção **Releases** do repositório. O código inclui um [workflow de build](.github/workflows/build.yml) para Linux x64, Windows x64 e macOS Intel/Apple Silicon. O repositório privado só permite o download a pessoas com acesso; para outros testadores, envie o ZIP diretamente.
-
-Para gerar no computador atual, instale as dependências e o PyInstaller no ambiente virtual e execute:
+### Gerar executáveis
 
 ```bash
 .venv/bin/python -m pip install 'pyinstaller>=6.15,<7'
 .venv/bin/python build.py
 ```
 
-No Windows, use `.venv\Scripts\python.exe`. O pacote fica em `release/` e contém o aplicativo, a licença e `codigo-fonte.zip`. Descompacte o ZIP antes de executar. O build precisa rodar em cada sistema operacional; o PyInstaller não gera executáveis de outros sistemas a partir do Linux. Os pacotes ainda não são assinados digitalmente. O executável Linux criado em distribuições recentes pode depender de uma versão de glibc igualmente recente.
+O pacote fica em `release/`, com o aplicativo, a licença e `codigo-fonte.zip`. O PyInstaller só gera executáveis para o sistema em que roda, por isso o [workflow de build](.github/workflows/build.yml) monta as versões de Linux x64, Windows x64 e macOS (Intel e Apple Silicon). Ele roda manualmente ou ao publicar uma tag `v*`.
 
-## Desenvolvimento
+### Desenvolvimento
 
-O motor de análise está em `conversor/pdf_analysis.py` e a exportação em `conversor/epub_export.py`. A interface fica em `conversor/gui.py` (comportamento), `conversor/ui_layout.py` (montagem das telas), `conversor/widgets.py` (componentes desenhados, como a estante e o sumário) e `conversor/appearance.py` (cores, fontes, ícones, logo e estilo). Para rodar os testes:
+| Arquivo | Conteúdo |
+| --- | --- |
+| `conversor/pdf_analysis.py` | Análise do PDF, classificação de blocos e OCR |
+| `conversor/epub_export.py` | Geração dos EPUBs de texto fluido e de layout fixo |
+| `conversor/gui.py` | Comportamento da janela |
+| `conversor/ui_layout.py` | Montagem das telas |
+| `conversor/widgets.py` | Componentes desenhados: estante, sumário, miniaturas, layout responsivo |
+| `conversor/appearance.py` | Cores, fontes, ícones, logo, textura de papel e estilo |
 
 ```bash
 .venv/bin/python -m unittest discover -s tests -v
 ```
 
-Os testes de imagens da interface usam Qt em modo `offscreen`, sem precisar abrir uma janela nem alterar as preferências de idioma do usuário.
+Os testes de interface usam o Qt em modo `offscreen` e um arquivo de configuração temporário. Eles não abrem janelas nem alteram as preferências de quem roda os testes.
 
-O próximo passo de qualidade é testar com PDFs reais: livro digital, PDF escaneado, duas colunas e livro ilustrado. A detecção automática só pode ser calibrada com exemplos representativos.
-
-Os modelos `por.traineddata` e `eng.traineddata` vêm do [tessdata_fast](https://github.com/tesseract-ocr/tessdata_fast), sob Apache-2.0. A licença está em `resources/tessdata/LICENSE`.
+A análise de PDF é uma heurística, corrigível na interface. Tabelas complexas, notas com referências cruzadas e tipografia detalhada ainda precisam de tratamento próprio. Testes com PDFs reais (livro digital, escaneado, duas colunas, ilustrado) ajudam a calibrar a detecção.
 
 ## Licença
 
-O código deste aplicativo é distribuído sob a [GNU Affero General Public License, versão 3](LICENSE) (`AGPL-3.0-only`). Ela permite usar, estudar, modificar e redistribuir o aplicativo, inclusive comercialmente, desde que seus termos sejam cumpridos. Versões modificadas distribuídas e determinadas formas de disponibilização pela rede exigem acesso ao código-fonte correspondente.
+O código é distribuído sob a [GNU Affero General Public License, versão 3](LICENSE) (`AGPL-3.0-only`). Você pode usar, estudar, modificar e redistribuir o aplicativo, inclusive comercialmente, desde que siga os termos da licença. Versões modificadas distribuídas, e certas formas de disponibilização pela rede, exigem acesso ao código-fonte correspondente.
 
-Os modelos de OCR mantêm a licença Apache-2.0 indicada acima, e as fontes, a SIL Open Font License 1.1. As demais bibliotecas instaladas por `requirements.txt` mantêm suas próprias licenças.
+- Os modelos de OCR `por.traineddata` e `eng.traineddata` vêm do [tessdata_fast](https://github.com/tesseract-ocr/tessdata_fast), sob Apache-2.0 (`resources/tessdata/LICENSE`).
+- As fontes Fraunces e Inter estão em `assets/fonts`, sob a SIL Open Font License 1.1 (`Fraunces-OFL.txt` e `Inter-OFL.txt`).
+- As demais bibliotecas de `requirements.txt` mantêm suas próprias licenças.
 
-Os EPUBs criados pelo aplicativo não recebem automaticamente a licença do código. Os direitos sobre textos, imagens e outros materiais de origem continuam sujeitos às licenças e autorizações desses materiais.
+Os EPUBs criados não recebem a licença do código. Os direitos sobre textos e imagens continuam sujeitos às licenças e autorizações do material de origem.
+
+## English
+
+**Liber** turns PDF books into reflowable EPUBs and manga or comic pages into fixed-layout EPUBs, with a review step in between. Everything runs locally.
+
+- **PDF books:** chapter, heading, image and note detection; removal of repeated headers and page numbers; Portuguese and English OCR for scanned pages; inline editing of every block; EPUB and original-page preview; cover from a page or your own image.
+- **Comics and manga:** import images, folders, comic PDFs or a public gallery URL; drag to reorder; cover and chapter markers; right-to-left reading.
+- **Interface:** an opening shelf with your recent EPUBs, drag and drop, a responsive layout and a Portuguese/English switch.
+
+Download the ZIP for your system from [Releases](https://github.com/k3v1nn/conversor-de-epub/releases), or run from source with Python 3.10+ (see above). Licensed under AGPL-3.0.
