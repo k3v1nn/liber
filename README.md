@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/k3v1nn/conversor-de-epub/releases"><img alt="Baixar" src="https://img.shields.io/badge/baixar-Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-b8432b"></a>
+  <a href="https://github.com/k3v1nn/liber/releases"><img alt="Baixar" src="https://img.shields.io/badge/baixar-Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-b8432b"></a>
   <img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-2f4a3f">
   <a href="LICENSE"><img alt="Licença AGPL-3.0" src="https://img.shields.io/badge/licen%C3%A7a-AGPL--3.0-17130f"></a>
 </p>
@@ -70,7 +70,7 @@
 
 ## Baixar
 
-Os executáveis ficam em **[Releases](https://github.com/k3v1nn/conversor-de-epub/releases)**. Baixe só o ZIP do seu sistema e extraia antes de abrir:
+Os executáveis ficam em **[Releases](https://github.com/k3v1nn/liber/releases)**. Baixe só o ZIP do seu sistema e extraia antes de abrir:
 
 | Sistema | Arquivo | Abrir |
 | --- | --- | --- |
@@ -168,4 +168,4 @@ Os EPUBs criados não recebem a licença do código. Os direitos sobre textos e 
 - **Comics and manga:** import images, folders, comic PDFs or a public gallery URL; drag to reorder; cover and chapter markers; right-to-left reading.
 - **Interface:** an opening shelf with your recent EPUBs, drag and drop, a responsive layout and a Portuguese/English switch.
 
-Download the ZIP for your system from [Releases](https://github.com/k3v1nn/conversor-de-epub/releases), or run from source with Python 3.10+ (see above). Licensed under AGPL-3.0.
+Download the ZIP for your system from [Releases](https://github.com/k3v1nn/liber/releases), or run from source with Python 3.10+ (see above). Licensed under AGPL-3.0.
