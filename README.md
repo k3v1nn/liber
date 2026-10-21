@@ -1,6 +1,8 @@
-# Conversor EPUB
+# Liber
 
 Aplicativo local para criar EPUBs a partir de livros em PDF ou páginas de mangá/HQ. Os arquivos são processados no computador.
+
+*Liber* é “livro” em latim, e também “livre”.
 
 ## Executar
 
@@ -43,9 +45,18 @@ Páginas ilustradas e imagens de capa respeitam a orientação EXIF (rotação e
 
 ## Interface
 
-O seletor no canto superior direito alterna entre português e inglês. O painel azul no topo mostra o andamento e o resultado das tarefas. Dados e capa ficam na lateral; a estrutura e a prévia ocupam o espaço principal. Os botões com ícones mostram sua função ao passar o mouse e também possuem nomes acessíveis. A opção **Escolher imagem** permite adicionar uma capa própria.
+O aplicativo abre numa tela escura com os dois caminhos, **Livro em PDF** e **Mangá / HQ**, e uma estante curva com os últimos EPUBs gerados. Clicar num livro da estante abre a pasta do arquivo. Antes do primeiro EPUB, a estante mostra clássicos em domínio público. Também é possível arrastar um PDF, imagens ou uma pasta para qualquer ponto da janela.
 
-A interface usa cartões e uma barra de ações para separar importação, dados e revisão, com contraste reforçado e indicação de foco nos controles. Campos e seletores possuem nomes acessíveis, e o painel lateral permite rolagem em janelas menores.
+A área de trabalho usa fundo de papel e três colunas:
+
+- **Livro** ou **HQ**: título, autor, idioma e capa. Na HQ, o interruptor define a leitura da direita para a esquerda.
+- **Estrutura** (PDF): os blocos aparecem como um sumário, com capítulos em destaque, até duas linhas de texto por parágrafo e um selo para notas, imagens, legendas e blocos ignorados. Ao selecionar um bloco, o editor abre logo abaixo dele, com o tipo do bloco, o tipo da página, o texto, **Aplicar correção** e as setas para reordenar. Os filtros mostram só capítulos, notas, imagens ou blocos ignorados.
+- **Páginas** (HQ): miniaturas que podem ser arrastadas para mudar a ordem. A ★ marca a capa e a fita vermelha marca o início de capítulo.
+- **Prévia**: a página EPUB ou a página original do PDF.
+
+As quatro formas de adicionar páginas de HQ (**Imagens**, **Pasta**, **PDF de HQ** e **URL pública**) ficam visíveis na barra superior e na tela vazia. A fita vermelha sob a barra superior indica uma tarefa em andamento, e o rodapé mostra a última mensagem. Em janelas mais estreitas, os dados do livro passam para uma faixa no topo e, abaixo de 860 px, as colunas ficam empilhadas. O seletor **PT · EN** alterna o idioma.
+
+As fontes Fraunces e Inter vêm em `assets/fonts`, sob a SIL Open Font License 1.1 (`Fraunces-OFL.txt` e `Inter-OFL.txt`).
 
 ## Executáveis
 
@@ -62,7 +73,7 @@ No Windows, use `.venv\Scripts\python.exe`. O pacote fica em `release/` e conté
 
 ## Desenvolvimento
 
-O motor de análise está em `conversor/pdf_analysis.py`, a exportação em `conversor/epub_export.py` e a interface em `conversor/gui.py`. Para rodar os testes:
+O motor de análise está em `conversor/pdf_analysis.py` e a exportação em `conversor/epub_export.py`. A interface fica em `conversor/gui.py` (comportamento), `conversor/ui_layout.py` (montagem das telas), `conversor/widgets.py` (componentes desenhados, como a estante e o sumário) e `conversor/appearance.py` (cores, fontes, ícones, logo e estilo). Para rodar os testes:
 
 ```bash
 .venv/bin/python -m unittest discover -s tests -v
@@ -78,6 +89,6 @@ Os modelos `por.traineddata` e `eng.traineddata` vêm do [tessdata_fast](https:/
 
 O código deste aplicativo é distribuído sob a [GNU Affero General Public License, versão 3](LICENSE) (`AGPL-3.0-only`). Ela permite usar, estudar, modificar e redistribuir o aplicativo, inclusive comercialmente, desde que seus termos sejam cumpridos. Versões modificadas distribuídas e determinadas formas de disponibilização pela rede exigem acesso ao código-fonte correspondente.
 
-Os modelos de OCR mantêm a licença Apache-2.0 indicada acima. As demais bibliotecas instaladas por `requirements.txt` mantêm suas próprias licenças.
+Os modelos de OCR mantêm a licença Apache-2.0 indicada acima, e as fontes, a SIL Open Font License 1.1. As demais bibliotecas instaladas por `requirements.txt` mantêm suas próprias licenças.
 
 Os EPUBs criados pelo aplicativo não recebem automaticamente a licença do código. Os direitos sobre textos, imagens e outros materiais de origem continuam sujeitos às licenças e autorizações desses materiais.
