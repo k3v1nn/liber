@@ -20,6 +20,9 @@ PAPER, PAPER_2, PAGE = "#f3ebdc", "#ece2cf", "#fbf7ee"
 LINE, LINE_2 = "#dccfb6", "#e6dcc8"
 TEXT, TEXT_2, TEXT_3 = "#2a221b", "#6b5d4d", "#9a8b76"
 SEAL, SEAL_DARK, GILT = "#b8432b", "#9a3522", "#c9a45c"
+# Feedback tones: each pairs with INK/PAPER at 4.5:1 or better so status text stays readable.
+SUCCESS = "#35602f"
+WARN_BG, WARN_INK, WARN_EDGE = "#f6e6bd", "#5c4310", "#c08a1e"
 SERIF, SANS = "Fraunces", "Inter"
 
 # A standing book and a lying book form the L of Liber.
@@ -45,6 +48,7 @@ PATHS = {
     "check": '<path d="m5 12 4 4L19 6"/>',
     "plus": '<path d="M12 5v14M5 12h14"/>',
     "star": '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>',
+    "alert": '<path d="M12 3 2 20h20zM12 10v4M12 17.5v.5"/>',
 }
 
 
@@ -151,6 +155,12 @@ QLabel#count {{ color: {TEXT_3}; font-size: 11px; }}
 QLabel#muted {{ color: {TEXT_2}; font-size: 12px; }}
 QLabel#hint, QLabel#status {{ color: {TEXT_2}; font-size: 12px; font-style: italic; }}
 QLabel#hint {{ color: {TEXT_3}; }}
+QLabel#status[tone="success"] {{ color: {SUCCESS}; font-style: normal; }}
+QLabel#status[tone="warning"] {{ color: {WARN_INK}; font-style: normal; }}
+QLabel#status[tone="failure"] {{ color: {SEAL_DARK}; font-style: normal; font-weight: 500; }}
+QFrame#warningStrip {{ background: {WARN_BG}; border: none; border-left: 3px solid {WARN_EDGE}; border-radius: 4px; }}
+QFrame#warningStrip QLabel {{ color: {WARN_INK}; font-size: 12px; }}
+QLabel#dirty {{ color: {SEAL_DARK}; font-size: 11px; font-weight: 500; }}
 QLabel#brandName {{ font-family: '{SERIF}'; font-size: 21px; font-weight: 600; color: {INK}; }}
 QLabel#brandNameDark {{ font-family: '{SERIF}'; font-size: 21px; font-weight: 600; color: {PAPER}; }}
 QLabel#emptyTitle {{ font-family: '{SERIF}'; font-size: 28px; color: {INK}; }}
@@ -175,6 +185,7 @@ QPushButton[kind="seal"]:disabled {{ background: #e3cdc2; border-color: #e3cdc2;
 QPushButton[kind="ink"] {{ background: {INK}; border-color: {INK}; color: {PAPER}; }}
 QPushButton[kind="ink"]:hover {{ background: #3a3128; }}
 QPushButton[kind="ink"]:focus {{ border-color: {SEAL}; }}
+QPushButton[kind="ink"]:disabled {{ background: #d3c8b2; border-color: #d3c8b2; color: #f3ebdc; }}
 QPushButton[kind="outline"] {{ border: 1px solid #cdbb98; background: rgba(255, 252, 245, 0.55); color: {INK}; border-radius: 20px; padding: 0 16px; }}
 QPushButton[kind="outline"]:hover {{ background: {PAGE}; border-color: {TEXT_3}; }}
 QPushButton[kind="outline"]:focus {{ border-color: {SEAL}; }}
@@ -202,6 +213,7 @@ QPushButton[kind="lang"][dark="true"] {{ color: #8f826e; }}
 QPushButton[kind="lang"][dark="true"]:hover, QPushButton[kind="lang"][dark="true"]:checked {{ color: {PAPER}; }}
 QPushButton[kind="seg"] {{ border-color: transparent; border-radius: 10px; padding: 0 11px; color: {TEXT_2}; font-size: 11px; font-weight: 400; }}
 QPushButton[kind="seg"]:hover {{ background: transparent; color: {INK}; }}
+QPushButton[kind="seg"]:focus {{ border-color: {SEAL}; }}
 QPushButton[kind="seg"]:checked {{ background: {PAGE}; color: {INK}; }}
 QPushButton[kind="icon"] {{ border-color: transparent; border-radius: 14px; padding: 0; }}
 QPushButton[kind="icon"]:focus {{ border-color: {SEAL}; }}

@@ -18,6 +18,7 @@ SOURCE_FILES = [
     ROOT / "build.py", ROOT / "run_app.py", ROOT / ".github" / "workflows" / "build.yml",
     ROOT / "assets" / "icon.png",
     *sorted((ROOT / "assets" / "fonts").glob("*")),
+    *sorted(path for path in (ROOT / "docs").rglob("*") if path.is_file()),
     *sorted((ROOT / "conversor").glob("*.py")),
     *sorted((ROOT / "tests").glob("*.py")),
     *sorted((ROOT / "resources" / "tessdata").glob("*")),

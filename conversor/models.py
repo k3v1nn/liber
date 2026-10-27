@@ -20,8 +20,7 @@ class Block:
     text: str = ""
     bbox: tuple[float, float, float, float] = (0, 0, 0, 0)
     font_size: float = 0
-    image: bytes | None = None
-    image_ext: str | None = None
+    image: bytes | None = field(default=None, repr=False, compare=False)
     source_text: str = ""
     rich_html: str = ""
 

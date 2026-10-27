@@ -4,11 +4,18 @@
 from __future__ import annotations
 
 import time
+from collections import OrderedDict
+from pathlib import Path
 
-from PySide6.QtCore import QPointF, QRect, QRectF, QSize, Qt, QTimer, QVariantAnimation, Signal
-from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPainterPath, QPen, QPixmap, QRadialGradient, QTransform
+from PySide6.QtCore import (
+    QEvent, QObject, QPointF, QRect, QRectF, QRunnable, QSize, Qt, QThreadPool, QTimer, QVariantAnimation, Signal,
+)
+from PySide6.QtGui import (
+    QColor, QFont, QFontMetrics, QImage, QImageReader, QPainter, QPainterPath, QPen, QPixmap,
+    QRadialGradient, QTransform,
+)
 from PySide6.QtWidgets import (
-    QCheckBox, QFrame, QGridLayout, QListView, QListWidget, QSizePolicy, QStyle, QStyledItemDelegate,
+    QCheckBox, QFrame, QGridLayout, QLabel, QListView, QListWidget, QSizePolicy, QStyle, QStyledItemDelegate,
     QVBoxLayout, QWidget,
 )
 
@@ -31,6 +38,11 @@ def _font(family: str, pixels: float, weight=QFont.Weight.Normal, italic=False) 
     font.setWeight(weight)
     font.setItalic(italic)
     return font
+
+
+def device_size(size: QSize, ratio: float) -> QSize:
+    """Pixel size a cached pixmap needs so it stays sharp on high-DPI screens."""
+    return QSize(max(1, round(size.width() * ratio)), max(1, round(size.height() * ratio)))
 
 
 def _shadow(painter: QPainter, rect: QRectF, radius: float, strength: int = 10):
@@ -95,12 +107,23 @@ class PagePreview(QWidget):
         super().__init__()
         self.placeholder = placeholder
         self.original = QPixmap()
+        self.scaled = QPixmap()
+        self.scaled_for = QSize()
         self.setMinimumSize(160, 160)
         self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
 
     def set_image(self, image: QPixmap):
         self.original = image
+        self.scaled = QPixmap()
         self.update()
+
+    def _page_pixmap(self, target: QSize) -> QPixmap:
+        """Scale once per target size; consecutive paints reuse the cached pixmap."""
+        if self.scaled.isNull() or self.scaled_for != target:
+            self.scaled_for = target
+            self.scaled = self.original.scaled(target, Qt.AspectRatioMode.IgnoreAspectRatio,
+                                               Qt.TransformationMode.SmoothTransformation)
+        return self.scaled
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -114,8 +137,9 @@ class PagePreview(QWidget):
             return
         size = self.original.size().scaled(area.size().toSize(), Qt.AspectRatioMode.KeepAspectRatio)
         page = QRectF(area.center().x() - size.width() / 2, area.top() + (area.height() - size.height()) / 2, size.width(), size.height())
+        image = self._page_pixmap(device_size(size, self.devicePixelRatioF()))
         _shadow(painter, page, 2)
-        painter.drawPixmap(page, self.original, QRectF(self.original.rect()))
+        painter.drawPixmap(page, image, QRectF(image.rect()))
         painter.setPen(QPen(QColor(LINE), 1))
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawRect(page)
@@ -127,11 +151,14 @@ class CoverThumb(QWidget):
     def __init__(self, size: QSize):
         super().__init__()
         self.pixmap = QPixmap()
+        self.scaled = QPixmap()
+        self.scaled_for = QSize()
         self.hovered = False
         self.setFixedSize(size)
 
     def set_image(self, pixmap: QPixmap):
         self.pixmap = pixmap
+        self.scaled = QPixmap()
         self.update()
 
     def enterEvent(self, event):
@@ -141,6 +168,14 @@ class CoverThumb(QWidget):
     def leaveEvent(self, event):
         self.hovered = False
         self.update()
+
+    def _cover(self, target: QSize) -> QPixmap:
+        """Crop-scaling runs once per size; painting only blits the cached pixmap."""
+        if self.scaled.isNull() or self.scaled_for != target:
+            self.scaled_for = target
+            self.scaled = self.pixmap.scaled(target, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                                             Qt.TransformationMode.SmoothTransformation)
+        return self.scaled
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -160,10 +195,11 @@ class CoverThumb(QWidget):
             painter.setPen(QPen(QColor(TEXT_3), 1, Qt.PenStyle.DashLine))
             painter.drawRect(book.adjusted(6, 6, -6, -6))
         else:
-            source = QRectF(self.pixmap.rect())
-            scale = max(book.width() / source.width(), book.height() / source.height())
-            painter.drawPixmap(QRectF(book.center().x() - source.width() * scale / 2, book.center().y() - source.height() * scale / 2,
-                                      source.width() * scale, source.height() * scale), self.pixmap, source)
+            target = device_size(book.size().toSize(), self.devicePixelRatioF())
+            cover = self._cover(target)
+            source = QRectF((cover.width() - target.width()) / 2, (cover.height() - target.height()) / 2,
+                            target.width(), target.height())
+            painter.drawPixmap(book, cover, source)
         painter.fillRect(QRectF(book.left(), book.top(), 4, book.height()), QColor(0, 0, 0, 55))
 
 
@@ -174,6 +210,7 @@ class ProgressRibbon(QWidget):
         super().__init__()
         self.setFixedHeight(2)
         self.phase = 0.0
+        self.fraction: float | None = None
         self.animation = QVariantAnimation(self, startValue=0.0, endValue=1.0, duration=1500, loopCount=-1)
         self.animation.valueChanged.connect(self._tick)
 
@@ -182,18 +219,103 @@ class ProgressRibbon(QWidget):
         self.update()
 
     def start(self):
+        self.fraction = None
         self.animation.start()
+
+    def set_progress(self, done: int, total: int):
+        """A worker-reported fraction replaces the indeterminate sweep."""
+        if total <= 0:
+            return
+        self.fraction = max(0.0, min(1.0, done / total))
+        self.update()
 
     def stop(self):
         self.animation.stop()
+        self.fraction = None
         self.update()
 
     def paintEvent(self, event):
+        painter = QPainter(self)
+        if self.fraction is not None:
+            painter.fillRect(QRectF(0, 0, self.width() * self.fraction, 2), QColor(SEAL))
+            return
         if self.animation.state() != QVariantAnimation.State.Running:
             return
-        painter = QPainter(self)
         segment = self.width() * .3
         painter.fillRect(QRectF(-segment + (self.width() + segment) * self.phase, 0, segment, 2), QColor(SEAL))
+
+
+class ElidedLabel(QLabel):
+    """One-line label that shows what fits, with the whole text as tooltip; `text()` keeps returning all of it."""
+
+    def __init__(self, text: str = "", mode: Qt.TextElideMode = Qt.TextElideMode.ElideRight):
+        super().__init__()
+        self._full = ""
+        self._mode = mode
+        self.setWordWrap(False)
+        self.setText(text)
+
+    def text(self) -> str:
+        return self._full
+
+    def setText(self, text: str):
+        self._full = text
+        self.setToolTip(text)
+        self._elide()
+        self.updateGeometry()
+
+    def clear(self):
+        self.setText("")
+
+    def sizeHint(self) -> QSize:
+        return QSize(self.fontMetrics().horizontalAdvance(self._full) + 2, super().sizeHint().height())
+
+    def minimumSizeHint(self) -> QSize:
+        return QSize(10, super().minimumSizeHint().height())
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._elide()
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if event.type() == QEvent.Type.FontChange:
+            self._elide()
+
+    def _elide(self):
+        width = self.contentsRect().width()
+        shown = self.fontMetrics().elidedText(self._full, self._mode, width) if width > 0 else self._full
+        if shown != QLabel.text(self):
+            QLabel.setText(self, shown)
+
+
+class DropOverlay(QWidget):
+    """Dashed frame and caption laid over the window while files are dragged onto it."""
+
+    def __init__(self, parent: QWidget):
+        super().__init__(parent)
+        self.caption = ""
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.hide()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.fillRect(self.rect(), QColor(184, 67, 43, 22))
+        pen = QPen(QColor(SEAL), 2, Qt.PenStyle.DashLine)
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRoundedRect(QRectF(self.rect()).adjusted(14, 14, -14, -14), 14, 14)
+        font = _font(SANS, 14, QFont.Weight.Medium)
+        painter.setFont(font)
+        metrics = QFontMetrics(font)
+        pill = QRectF(0, 0, metrics.horizontalAdvance(self.caption) + 40, 38)
+        pill.moveCenter(QPointF(self.rect().center()))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(INK))
+        painter.drawRoundedRect(pill, 19, 19)
+        painter.setPen(QColor(PAPER))
+        painter.drawText(pill, Qt.AlignmentFlag.AlignCenter, self.caption)
 
 
 class ToggleSwitch(QCheckBox):
@@ -333,12 +455,96 @@ class TocDelegate(QStyledItemDelegate):
         painter.restore()
 
 
+THUMBNAIL_SIZE = QSize(168, 240)
+THUMBNAIL_CACHE_LIMIT = 256
+
+
+def _decode_thumbnail(path: str, size: QSize) -> QImage:
+    """Decode a small, EXIF-oriented copy of an image; safe to call off the GUI thread."""
+    reader = QImageReader(path)
+    reader.setAutoTransform(True)
+    source = reader.size()
+    if source.isValid() and not source.isEmpty():
+        reader.setScaledSize(source.scaled(size, Qt.AspectRatioMode.KeepAspectRatio))
+    return reader.read()
+
+
+class _ThumbnailRequest(QRunnable):
+    def __init__(self, path: str, mtime: float):
+        super().__init__()
+        self.path = path
+        self.mtime = mtime
+
+    def run(self):
+        THUMBNAILS.finished.emit(self.path, self.mtime, _decode_thumbnail(self.path, THUMBNAIL_SIZE))
+
+
+class ThumbnailLoader(QObject):
+    """Decodes page thumbnails off the GUI thread; LRU cache keyed by path and modification time."""
+
+    finished = Signal(str, float, QImage)
+    changed = Signal()
+
+    def __init__(self):
+        super().__init__()
+        self.cache: OrderedDict[tuple[str, float], QPixmap] = OrderedDict()
+        self.pending: set[tuple[str, float]] = set()
+        # Holding the runnables keeps Python from collecting a worker the pool is still running.
+        self.requests: dict[tuple[str, float], _ThumbnailRequest] = {}
+        self.pool = QThreadPool(self)
+        self.pool.setMaxThreadCount(4)
+        # The signal arrives from a worker thread; storing the QPixmap must happen on the GUI one.
+        self.finished.connect(self._store, Qt.ConnectionType.QueuedConnection)
+
+    def thumb(self, path: str) -> QPixmap:
+        """The cached thumbnail, or an empty pixmap while the request is in flight."""
+        if not path:
+            return QPixmap()
+        try:
+            mtime = Path(path).stat().st_mtime
+        except OSError:
+            return QPixmap()
+        key = (path, mtime)
+        cached = self.cache.get(key)
+        if cached is not None:
+            self.cache.move_to_end(key)
+            return cached
+        if key not in self.pending:
+            self.pending.add(key)
+            request = _ThumbnailRequest(*key)
+            self.requests[key] = request
+            self.pool.start(request)
+        return QPixmap()
+
+    def _store(self, path: str, mtime: float, image: QImage):
+        key = (path, mtime)
+        self.pending.discard(key)
+        self.requests.pop(key, None)
+        # A failed decode is cached as an empty pixmap: repainting must not retry it every frame.
+        pixmap = QPixmap()
+        if not image.isNull():
+            pixmap = QPixmap.fromImage(image)
+            pixmap.setDevicePixelRatio(2)
+        self.cache[key] = pixmap
+        self.cache.move_to_end(key)
+        while len(self.cache) > THUMBNAIL_CACHE_LIMIT:
+            self.cache.popitem(last=False)
+        self.changed.emit()
+
+    def busy(self) -> bool:
+        return bool(self.pending)
+
+
+# One loader for the whole app: thumbnails survive list rebuilds and language switches.
+THUMBNAILS = ThumbnailLoader()
+
+
 class PageList(QListWidget):
     """Wrapping grid of comic pages that can be reordered by dragging."""
 
     reordered = Signal()
 
-    def __init__(self, loader):
+    def __init__(self):
         super().__init__()
         self.setViewMode(QListView.ViewMode.ListMode)
         self.setFlow(QListView.Flow.LeftToRight)
@@ -351,7 +557,7 @@ class PageList(QListWidget):
         self.setDragDropMode(QListWidget.DragDropMode.InternalMove)
         self.setDefaultDropAction(Qt.DropAction.MoveAction)
         self.setVerticalScrollMode(QListView.ScrollMode.ScrollPerPixel)
-        self.setItemDelegate(PageThumbDelegate(loader, self))
+        self.setItemDelegate(PageThumbDelegate(self))
 
     def dropEvent(self, event):
         super().dropEvent(event)
@@ -359,24 +565,19 @@ class PageList(QListWidget):
 
 
 class PageThumbDelegate(QStyledItemDelegate):
-    def __init__(self, loader, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
-        self.loader = loader
-        self.cache: dict[str, QPixmap] = {}
         self.number = _font(SANS, 10.5)
         self.chapter = _font(SERIF, 11.5)
+        THUMBNAILS.changed.connect(self._thumb_ready)
+
+    def _thumb_ready(self):
+        view = self.parent()
+        if view is not None:
+            view.viewport().update()
 
     def sizeHint(self, option, index):
         return QSize(98, 176)
-
-    def _thumb(self, path: str) -> QPixmap:
-        if path not in self.cache:
-            image = self.loader(path)
-            if not image.isNull():
-                image = image.scaled(QSize(168, 240), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-                image.setDevicePixelRatio(2)
-            self.cache[path] = image
-        return self.cache[path]
 
     def paint(self, painter, option, index):
         painter.save()
@@ -384,7 +585,8 @@ class PageThumbDelegate(QStyledItemDelegate):
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
         cell = QRectF(option.rect)
         area = QRectF(cell.left() + 8, cell.top() + 10, cell.width() - 16, 124)
-        image = self._thumb(index.data(PAGE_PATH))
+        # Never decodes here: the first paint shows a placeholder and the loader repaints later.
+        image = THUMBNAILS.thumb(index.data(PAGE_PATH) or "")
         size = QSize(60, 86) if image.isNull() else image.deviceIndependentSize().toSize().scaled(area.size().toSize(), Qt.AspectRatioMode.KeepAspectRatio)
         lift = 3 if option.state & QStyle.StateFlag.State_MouseOver else 0
         page = QRectF(area.center().x() - size.width() / 2, area.bottom() - size.height() - lift, size.width(), size.height())
@@ -568,7 +770,7 @@ class BookShelf(QWidget):
         self.hover = -1
         self.started = time.monotonic()
         self.last = self.started
-        self.hits: list[tuple[int, object]] = []
+        self.title_fonts: dict[tuple[str, str, int], QFont] = {}
         self.timer = QTimer(self)
         self.timer.setInterval(16)
         self.timer.timeout.connect(self._tick)
@@ -581,6 +783,9 @@ class BookShelf(QWidget):
 
     def restart(self):
         self.started = time.monotonic()
+        self.last = self.started
+        if self.isVisible() and not self.timer.isActive():
+            self.timer.start()
         self.update()
 
     def showEvent(self, event):
@@ -593,7 +798,10 @@ class BookShelf(QWidget):
     def leaveEvent(self, event):
         self.paused = False
         self.hover = -1
+        self.last = time.monotonic()
         self.setCursor(Qt.CursorShape.ArrowCursor)
+        if self.isVisible() and not self.timer.isActive():
+            self.timer.start()
 
     def mouseMoveEvent(self, event):
         self.paused = True
@@ -606,40 +814,21 @@ class BookShelf(QWidget):
         if index >= 0 and self.books[index].get("path"):
             self.opened.emit(self.books[index]["path"])
 
-    def _book_at(self, point) -> int:
-        point = point.toPoint()
-        for index, polygon in reversed(self.hits):
-            if polygon.containsPoint(point, Qt.FillRule.OddEvenFill):
-                return index
-        return -1
-
-    def _tick(self):
-        now = time.monotonic()
-        if not self.paused:
-            self.offset += (now - self.last) * 16
-        self.last = now
-        self.update()
-
-    def paintEvent(self, event):
-        if not self.books:
-            return
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+    def _placed_books(self) -> list[tuple[int, QTransform, float, float, float]]:
+        """Geometry of the books on screen right now: index, transform, opacity, width, height."""
         width, height = self.width(), self.height()
+        count = len(self.books)
+        if not count or width <= 0 or height <= 0:
+            return []
         book_w = min(height / 1.75, width / 8.5, 118)
         book_h = book_w * 1.5
-        step = book_w * 1.25
-        count = len(self.books)
-        total = max(count * step, width * 1.25)
+        total = max(count * book_w * 1.25, width * 1.25)
         step = total / count
         elapsed = time.monotonic() - self.started
-        placed = []
-        for index in range(count):
-            x = (index * step - self.offset) % total - total / 2
-            placed.append((abs(x), index, x))
-        self.hits = []
-        for _, index, x in sorted(placed, reverse=True):
+        placed = [((index * step - self.offset) % total - total / 2, index) for index in range(count)]
+        placed.sort(key=lambda item: (abs(item[0]), item[1]), reverse=True)
+        geometry = []
+        for x, index in placed:
             k = x / (width / 2)
             delay = .25 + abs(index - count / 2) * .06
             t = min(1.0, max(0.0, (elapsed - delay) / 1.1))
@@ -657,11 +846,61 @@ class BookShelf(QWidget):
             transform.scale(scale, scale)
             transform.rotate(tilt * (1 - eased))
             transform.translate(-book_w / 2, -book_h / 2)
+            geometry.append((index, transform, fade * min(1.0, t * 3), book_w, book_h))
+        return geometry
+
+    def _book_at(self, point) -> int:
+        """Hit-test at click time; the painted geometry may belong to an older frame."""
+        point = point.toPoint()
+        for index, transform, opacity, book_w, book_h in reversed(self._placed_books()):
+            if opacity >= .4 and transform.mapToPolygon(QRect(0, 0, int(book_w), int(book_h))).containsPoint(
+                    point, Qt.FillRule.OddEvenFill):
+                return index
+        return -1
+
+    def _settled(self) -> bool:
+        """True once every book has finished falling into place."""
+        return time.monotonic() - self.started > .25 + len(self.books) * .03 + 1.1
+
+    def _tick(self):
+        now = time.monotonic()
+        if self.paused and self._settled():
+            # A settled shelf under the pointer needs no 60 fps repaints.
+            self.timer.stop()
+            self.update()
+            return
+        if not self.paused:
+            self.offset += (now - self.last) * 16
+        self.last = now
+        self.update()
+
+    def paintEvent(self, event):
+        if not self.books:
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        for index, transform, opacity, book_w, book_h in self._placed_books():
             painter.setTransform(transform)
-            painter.setOpacity(fade * min(1.0, t * 3))
+            painter.setOpacity(opacity)
             self._paint_book(painter, self.books[index], QRectF(0, 0, book_w, book_h))
-            if fade >= .4:
-                self.hits.append((index, transform.mapToPolygon(QRect(0, 0, int(book_w), int(book_h)))))
+
+    def _title_font(self, title: str, manga: bool, width: float) -> QFont:
+        """Fit the title once per cover width; painting itself never measures fonts."""
+        key = (title, "manga" if manga else "book", round(width))
+        font = self.title_fonts.get(key)
+        if font is None:
+            available = width * .74
+            pixels = width / (5.6 if manga else 8)
+            font = _font(SANS if manga else SERIF, pixels, QFont.Weight.DemiBold if manga else QFont.Weight.Normal)
+            longest = max(title.split() or [title], key=len)
+            while pixels > 7 and QFontMetrics(font).horizontalAdvance(longest) > available:
+                pixels -= .5
+                font.setPixelSize(round(pixels))
+            if len(self.title_fonts) > 256:
+                self.title_fonts.clear()
+            self.title_fonts[key] = font
+        return font
 
     def _paint_book(self, painter: QPainter, book: dict, rect: QRectF):
         painter.setPen(Qt.PenStyle.NoPen)
@@ -689,13 +928,7 @@ class BookShelf(QWidget):
             painter.drawText(inner, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft | Qt.TextFlag.TextWordWrap, (book.get("author") or "").upper())
             manga = book.get("kind") == "manga"
             title = book["title"].upper() if manga else book["title"]
-            pixels = rect.width() / (5.6 if manga else 8)
-            title_font = _font(SANS if manga else SERIF, pixels, QFont.Weight.DemiBold if manga else QFont.Weight.Normal)
-            longest = max(title.split() or [title], key=len)
-            while pixels > 7 and QFontMetrics(title_font).horizontalAdvance(longest) > inner.width():
-                pixels -= .5
-                title_font.setPixelSize(round(pixels))
-            painter.setFont(title_font)
+            painter.setFont(self._title_font(title, manga, rect.width()))
             painter.drawText(inner.adjusted(0, inner.height() * .34, 0, 0), Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft | Qt.TextFlag.TextWordWrap, title)
             line = QColor(ink)
             line.setAlpha(110)

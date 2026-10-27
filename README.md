@@ -44,6 +44,7 @@
 **Mangá / HQ → EPUB de layout fixo**
 
 - Importa imagens, uma pasta inteira (em ordem natural: 2 antes de 10), um PDF de HQ ou as imagens visíveis de uma URL pública.
+- Aceita vários links de uma vez, um por linha, e junta as páginas de todos na mesma HQ.
 - Reordena as páginas arrastando as miniaturas.
 - Marca a capa (★) e o início de cada capítulo (fita vermelha).
 - Lê da direita para a esquerda ou da esquerda para a direita.
@@ -104,7 +105,31 @@ O sumário do EPUB usa os blocos marcados como **Capítulo**. Textos antes do pr
 2. Arraste as miniaturas para reordenar, marque a capa e os inícios de capítulo.
 3. Defina a direção de leitura e clique em **Gerar EPUB**.
 
+As importações somam páginas: imagens, pastas, PDFs e links entram na mesma HQ, na ordem em que você revisar.
+
 Na importação por URL, os caminhos relativos das imagens são resolvidos a partir do endereço final da página, inclusive após redirecionamentos. Sites que montam as imagens com JavaScript, exigem login ou oferecem só miniaturas podem precisar de arquivos baixados manualmente. O importador não contorna essas restrições. Confira se você tem autorização para baixar e reutilizar o conteúdo.
+
+#### Vários links de uma vez
+
+Em **URL pública**, cole um link por linha: páginas de capítulo ou endereços diretos de imagem. Linhas que não sejam endereços `http://` ou `https://` são descartadas, e o diálogo mostra quantos links estão prontos.
+
+- Todas as páginas entram na mesma HQ, na ordem dos links e na ordem das imagens dentro de cada link. Sai um único EPUB.
+- Um link que falha não interrompe os outros: o rodapé resume a importação e lista cada falha pelo número do link (`link 3 falhou: …`).
+- Cada link contribui com até 300 imagens; acima disso o rodapé avisa `limitado a 300`.
+- **Cancelar**, ou **Esc**, interrompe o download e descarta as páginas dessa importação. O que já estava na HQ continua lá.
+- Se a área de transferência tiver links, eles já aparecem no campo.
+
+### Atalhos, arrastar e sessão
+
+| Atalho | O que faz |
+| --- | --- |
+| **Ctrl+O** | Em **Mangá / HQ**, adiciona imagens. Nos outros casos, escolhe o PDF do livro. |
+| **Ctrl+S** | Gera o EPUB, quando o botão **Gerar EPUB** está disponível. |
+| **Esc** | Cancela a tarefa em andamento; fora de uma tarefa, continua fechando diálogos e menus. |
+
+Arraste um PDF, imagens ou uma pasta para qualquer ponto da janela. Imagens e pastas vão para a HQ, em ordem natural (`2` antes de `10`); um PDF vira livro — ou páginas da HQ, se você já estiver no modo **Mangá / HQ**. Ao soltar vários PDFs, só o primeiro é usado, e o rodapé avisa.
+
+Ao fechar, o aplicativo guarda o tamanho da janela, o modo e a tela em que você estava, e volta para o mesmo lugar na próxima abertura. As páginas e o PDF em si não são restaurados: importe de novo.
 
 ### Privacidade
 
@@ -129,7 +154,7 @@ No Windows, use `.venv\Scripts\python.exe` no lugar de `.venv/bin/python`.
 .venv/bin/python build.py
 ```
 
-O pacote fica em `release/`, com o aplicativo, a licença e `codigo-fonte.zip`. O PyInstaller só gera executáveis para o sistema em que roda, por isso o [workflow de build](.github/workflows/build.yml) monta as versões de Linux x64, Windows x64 e macOS (Intel e Apple Silicon). Ele roda manualmente ou ao publicar uma tag `v*`.
+O pacote fica em `release/`, com o aplicativo, a licença e `codigo-fonte.zip` (código, testes e as capturas de `docs/` usadas neste README). O PyInstaller só gera executáveis para o sistema em que roda, por isso o [workflow de build](.github/workflows/build.yml) monta as versões de Linux x64, Windows x64 e macOS (Intel e Apple Silicon). Ele roda manualmente ou ao publicar uma tag `v*`, e nesse caso anexa os ZIPs ao release da tag. O workflow também roda os testes em todo pull request e push de branch, além de uma checagem com as versões mínimas declaradas em `requirements.txt`.
 
 ### Desenvolvimento
 
@@ -146,7 +171,7 @@ O pacote fica em `release/`, com o aplicativo, a licença e `codigo-fonte.zip`. 
 .venv/bin/python -m unittest discover -s tests -v
 ```
 
-Os testes de interface usam o Qt em modo `offscreen` e um arquivo de configuração temporário. Eles não abrem janelas nem alteram as preferências de quem roda os testes.
+A mesma suíte roda com `pytest -q`, que é como o CI a executa. Nos dois casos, os testes de interface usam o Qt em modo `offscreen` e um arquivo de configuração temporário. Eles não abrem janelas nem alteram as preferências de quem roda os testes.
 
 A análise de PDF é uma heurística, corrigível na interface. Tabelas complexas, notas com referências cruzadas e tipografia detalhada ainda precisam de tratamento próprio. Testes com PDFs reais (livro digital, escaneado, duas colunas, ilustrado) ajudam a calibrar a detecção.
 
@@ -165,7 +190,7 @@ Os EPUBs criados não recebem a licença do código. Os direitos sobre textos e 
 **Liber** turns PDF books into reflowable EPUBs and manga or comic pages into fixed-layout EPUBs, with a review step in between. Everything runs locally.
 
 - **PDF books:** chapter, heading, image and note detection; removal of repeated headers and page numbers; Portuguese and English OCR for scanned pages; inline editing of every block; EPUB and original-page preview; cover from a page or your own image.
-- **Comics and manga:** import images, folders, comic PDFs or a public gallery URL; drag to reorder; cover and chapter markers; right-to-left reading.
-- **Interface:** an opening shelf with your recent EPUBs, drag and drop, a responsive layout and a Portuguese/English switch.
+- **Comics and manga:** import images, folders, comic PDFs or public gallery URLs, several at a time, one per line; drag to reorder; cover and chapter markers; right-to-left reading.
+- **Interface:** an opening shelf with your recent EPUBs, drag and drop, `Ctrl+O`/`Ctrl+S`/`Esc`, a window that reopens where you left it, a responsive layout and a Portuguese/English switch.
 
 Download the ZIP for your system from [Releases](https://github.com/k3v1nn/liber/releases), or run from source with Python 3.10+ (see above). Licensed under AGPL-3.0.

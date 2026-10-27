@@ -94,6 +94,7 @@ class WorkspaceTests(unittest.TestCase):
         self.window.pdf_title.setText("Meu livro")
         self.window._append_manga_pages(self._pages(2))
         self.window._change_language("en")
+        self.app.processEvents()
         self.assertIs(self.window.pdf, project)
         self.assertEqual(self.window.pdf_title.text(), "Meu livro")
         self.assertEqual(self.window.export_button.text(), "Create EPUB")
@@ -118,6 +119,31 @@ class WorkspaceTests(unittest.TestCase):
         shelf.grab()
         self.assertGreaterEqual(shelf._book_at(QPointF(500.5, 107.5)), 0)
         self.assertEqual(shelf._book_at(QPointF(500.5, -300.5)), -1)
+
+    def test_shelf_hit_testing_survives_a_stale_paint(self):
+        shelf = self.window.shelf
+        shelf.resize(1000, 214)
+        shelf.started -= 5
+        # No grab(): the geometry must be computed from the current frame, not from an old paint.
+        self.assertGreaterEqual(shelf._book_at(QPointF(500.5, 107.5)), 0)
+
+    def test_shelf_shows_the_real_recents_without_padding(self):
+        recents = [{"path": str(self.root / f"book{index}.epub"), "title": f"Livro {index}", "kind": "pdf"}
+                   for index in range(3)]
+        self.settings.setValue("recent_epubs", json.dumps(recents))
+        self.window._refresh_shelf()
+        self.assertEqual([book["path"] for book in self.window.shelf.books], [entry["path"] for entry in recents])
+
+    def test_shelf_paints_without_a_usable_width(self):
+        shelf = self.window.shelf
+        shelf.resize(0, 214)
+        shelf.grab()
+
+    def test_shelf_title_fit_is_cached_per_width(self):
+        shelf = self.window.shelf
+        first = shelf._title_font("Dom Casmurro", False, 100.0)
+        self.assertIs(shelf._title_font("Dom Casmurro", False, 100.0), first)
+        self.assertIsNot(shelf._title_font("Dom Casmurro", False, 120.0), first)
 
 
 if __name__ == "__main__":
